@@ -16,6 +16,7 @@ _METHOD_TO_BACKEND = {
     "recursive-xycut": "recursive_xycut",
     "rlsa": "rlsa",
     "rfdert": "rfdert",
+    "swindocseg": "swindocseg",
     "vgt": "vgt",
 }
 
@@ -49,11 +50,11 @@ from utils.fileutils import *
 
 def main(
     img,
-    image_info,
-    ground_truth,
     model,
-    evaluation_metric,
-    categories,
+    categories=CATEGORIES,
+    evaluation_metric=None,
+    image_info=None,
+    ground_truth=None,
     visualization=False,
     display_ground=False,
     display_img=None,
@@ -245,6 +246,15 @@ def init_model(method, config, verbose=False):
             if config is not None
             else lp.RFDETRLayoutModel()
         )
+    elif method == "swindocseg":
+        return (
+            lp.SwinDocSegLayoutModel(**config)
+            if config is not None
+            else lp.SwinDocSegLayoutModel(
+                WEIGHTS_PATH + "/swindocseg/model_final_doclay_swindocseg.pth",
+                yaml_path="config/swindocseg/yaml/doclaynet/config_doclay.yaml"
+            )
+        )
     elif method == "nemotron":
         return (
             lp.NemotronLayoutModel(**config)
@@ -398,69 +408,103 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    coco = COCO(COCO_ANNO_PATH)
+    image_list, coco_anns_list, img_info_list = None, None, None
+    if args.display_ground or args.display_detection:
+        coco = COCO(COCO_ANNO_PATH)
+
+            # Collect images and annotations for the chosen mode
+        image_list, coco_anns_list, img_info_list = load_images_for_mode(
+            args.mode, coco, args.file
+        )
+
+        categories = coco.cats
+    else:
+        image_list = [args.file]
+        coco_anns_list, img_info_list = None, None
+
     config = read_config(args.config)
     show = args.display_detection or args.display_ground
 
     # Initialize the DLA model
     model = init_model(args.dla_method, config, verbose=args.verbose)
 
-    # Collect images and annotations for the chosen mode
-    image_list, coco_anns_list, img_info_list = load_images_for_mode(
-        args.mode, coco, args.file
-    )
-
-    categories = coco.cats
-
     metric_scores_list = []
 
     # Process each image
-    for image_path, coco_anns, img_info in zip(image_list, coco_anns_list, img_info_list):
-        print(f"Processing image: {image_path}")
+    if not coco_anns_list and not img_info_list:
+        for image_path in image_list:
+            print(f"Processing image: {image_path}")
 
-        # Load the image: as numpy array for detectron2, as path for other models
-        if args.dla_method in ("faster-rcnn", "mask-rcnn"):
-            image = read_picture(image_path)
-        elif args.dla_method in ("docstrum", "rlsa"):
-            image = read_picture(image_path, to_rgb=False)
-        else:
-            image = image_path
+            # Load the image: as numpy array for detectron2, as path for other models
+            if args.dla_method in ("faster-rcnn", "mask-rcnn"):
+                image = read_picture(image_path)
+            elif args.dla_method in ("docstrum", "rlsa"):
+                image = read_picture(image_path, to_rgb=False)
+            else:
+                image = image_path
 
-        save_coco_path = (
-            build_save_path(args.save, args.mode, image_path)
-            if args.save
-            else None
-        )
+            save_coco_path = (
+                build_save_path(args.save, args.mode, image_path)
+                if args.save
+                else None
+            )
 
-        metric_scores = main(
-            image,
-            img_info,
-            coco_anns,
-            model,
-            args.evaluation_metric.lower() if args.evaluation_metric else None,
-            categories,
-            visualization=show,
-            display_ground=args.display_ground,
-            display_img=image if args.dla_method in ("faster-rcnn", "mask-rcnn", "docstrum", "rlsa") else cv2.imread(image),
-            save_coco=save_coco_path,
-            save_image_path=args.save_image_path,
-        )
+            main(
+                image,
+                model,
+                args.evaluation_metric.lower() if args.evaluation_metric else None,
+                visualization=show,
+                display_img=image if args.dla_method in ("faster-rcnn", "mask-rcnn", "docstrum", "rlsa") else cv2.imread(image),
+                save_coco=save_coco_path,
+                save_image_path=args.save_image_path,
+            )
+    else:
+        for image_path, coco_anns, img_info in zip(image_list, coco_anns_list, img_info_list):
+            print(f"Processing image: {image_path}")
 
-        metric_scores_list.append(metric_scores)
+            # Load the image: as numpy array for detectron2, as path for other models
+            if args.dla_method in ("faster-rcnn", "mask-rcnn"):
+                image = read_picture(image_path)
+            elif args.dla_method in ("docstrum", "rlsa"):
+                image = read_picture(image_path, to_rgb=False)
+            else:
+                image = image_path
 
-    # Print average evaluation scores across all images
-    if args.evaluation_metric:
-        from collections import defaultdict
-        # Accumulate sums and counts per key
-        totals = defaultdict(float)
-        counts = defaultdict(int)
+            save_coco_path = (
+                build_save_path(args.save, args.mode, image_path)
+                if args.save
+                else None
+            )
 
-        for d in metric_scores_list:
-            for key, value in d.items():
-                totals[key] += value
-                counts[key] += 1
+            metric_scores = main(
+                image,
+                model,
+                categories=categories,
+                evaluation_metric=args.evaluation_metric.lower() if args.evaluation_metric else None,
+                image_info=img_info,
+                ground_truth=coco_anns,
+                visualization=show,
+                display_ground=args.display_ground,
+                display_img=image if args.dla_method in ("faster-rcnn", "mask-rcnn", "docstrum", "rlsa") else cv2.imread(image),
+                save_coco=save_coco_path,
+                save_image_path=args.save_image_path,
+            )
 
-        averages = {key: totals[key] / counts[key] for key in totals}
+            metric_scores_list.append(metric_scores)
 
-        print(metric_scores_list)
-        print(f"Averages: {averages}")
+        # Print average evaluation scores across all images
+        if args.evaluation_metric:
+            from collections import defaultdict
+            # Accumulate sums and counts per key
+            totals = defaultdict(float)
+            counts = defaultdict(int)
+
+            for d in metric_scores_list:
+                for key, value in d.items():
+                    totals[key] += value
+                    counts[key] += 1
+
+            averages = {key: totals[key] / counts[key] for key in totals}
+
+            print(metric_scores_list)
+            print(f"Averages: {averages}")
