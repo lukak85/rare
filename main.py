@@ -8,11 +8,13 @@ _METHOD_TO_BACKEND = {
     "docstrum": "docstrum",
     "doclayout-yolo": "doclayout_yolo",
     "dotsocr": "dotsocr",
+    "efficientdet": "effdet",
     "faster-rcnn": "detectron2",
     "layoutlmv3": "layoutlmv3",
     "mask-rcnn": "detectron2",
     "nemotron": "nemotron",
     "pp-doclayoutv3" : "ppdoclayoutv3",
+    "ppyolo": "paddle",
     "recursive-xycut": "recursive_xycut",
     "rlsa": "rlsa",
     "rfdert": "rfdert",
@@ -183,18 +185,60 @@ def init_model(method, config, verbose=False):
         A layoutparser model instance.
     """
     if method == "faster-rcnn":
-        return lp.Detectron2LayoutModel(
-            "./data/model/fasterrcnn/publaynet/config.yml",
-            model_path="./data/model/fasterrcnn/publaynet/model_final.pth",
-            extra_config=["MODEL.ROI_HEADS.SCORE_THRESH_TEST", 0.8],
-            label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+        return (
+            lp.Detectron2LayoutModel(
+                **config,
+                extra_config=["MODEL.ROI_HEADS.SCORE_THRESH_TEST", 0.8],
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+             )
+            if config is not None
+            else lp.Detectron2LayoutModel(
+                "./data/model/fasterrcnn/publaynet/config.yml",
+                model_path="./data/model/fasterrcnn/publaynet/model_final.pth",
+                extra_config=["MODEL.ROI_HEADS.SCORE_THRESH_TEST", 0.8],
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+            )
         )
     elif method == "mask-rcnn":
-        return lp.Detectron2LayoutModel(
-            "./data/model/maskrcnn/publaynet/50/config.yml",
-            model_path="./data/model/maskrcnn/publaynet/50/model_final.pth",
-            extra_config=["MODEL.ROI_HEADS.SCORE_THRESH_TEST", 0.8],
-            label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+        return (
+            lp.Detectron2LayoutModel(
+                **config,
+                extra_config=["MODEL.ROI_HEADS.SCORE_THRESH_TEST", 0.8],
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+            )
+            if config is not None
+            else lp.Detectron2LayoutModel(
+                "./data/model/maskrcnn/publaynet/50/config.yml",
+                model_path="./data/model/maskrcnn/publaynet/50/model_final.pth",
+                extra_config=["MODEL.ROI_HEADS.SCORE_THRESH_TEST", 0.8],
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+            )
+        )
+    elif method == "efficientdet":
+        return (
+            lp.EfficientDetLayoutModel(
+                **config,
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"}
+            )
+            if config is not None
+            else lp.EfficientDetLayoutModel(
+                config_path="tf_efficientdet_d1",
+                model_path="./data/model/efficientdet/publaynet/publaynet-tf_efficientdet_d1.pth.tar",
+                label_map={0: "Text", 1: "Title", 2: "List", 3:"Table", 4:"Figure"}
+            )
+        )
+    elif method == "ppyolo":
+        return (
+            lp.PaddleDetectionLayoutModel(
+                **config,
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"}
+            )
+            if config is not None
+            else lp.PaddleDetectionLayoutModel(
+                config_path="./data/model/ppyolo/publaynet/ppyolov2_r50vd_dcn_365e_publaynet/infer_cfg.yml",
+                model_path="./data/model/ppyolo/publaynet/ppyolov2_r50vd_dcn_365e_publaynet",
+                label_map={0: "Text", 1: "Title", 2: "List", 3: "Table", 4: "Figure"},
+            )
         )
     elif method == "docstrum":
         return (
@@ -353,6 +397,12 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
+        "-d", "--dla",
+        help="DLA method: detectron2, docstrum, dotsocr, doclayout-yolo, layoutlmv3, dit",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
         "-dd", "--display-detection",
         help="Display image with detected bounding boxes",
         action="store_true",
@@ -361,12 +411,6 @@ if __name__ == "__main__":
         "-dg", "--display-ground",
         help="Display ground-truth bounding boxes",
         action="store_true",
-    )
-    parser.add_argument(
-        "-dm", "--dla-method",
-        help="DLA method: detectron2, docstrum, dotsocr, doclayout-yolo, layoutlmv3, dit",
-        type=str,
-        required=True,
     )
     parser.add_argument(
         "-dt", "--display-text",
@@ -389,6 +433,12 @@ if __name__ == "__main__":
         help="Processing mode: page (single image), pdf (whole PDF), or corpus",
         type=str,
         default="page",
+    )
+    parser.add_argument(
+        "-o", "--order",
+        help="Reading order method: xycut",
+        type=str,
+        required=True,
     )
     parser.add_argument(
         "-s", "--save",
@@ -463,7 +513,7 @@ if __name__ == "__main__":
             print(f"Processing image: {image_path}")
 
             # Load the image: as numpy array for detectron2, as path for other models
-            if args.dla_method in ("faster-rcnn", "mask-rcnn"):
+            if args.dla_method in ("faster-rcnn", "mask-rcnn", "ppyolo", "efficientdet"):
                 image = read_picture(image_path)
             elif args.dla_method in ("docstrum", "rlsa"):
                 image = read_picture(image_path, to_rgb=False)
@@ -485,7 +535,7 @@ if __name__ == "__main__":
                 ground_truth=coco_anns,
                 visualization=show,
                 display_ground=args.display_ground,
-                display_img=image if args.dla_method in ("faster-rcnn", "mask-rcnn", "docstrum", "rlsa") else cv2.imread(image),
+                display_img=image if args.dla_method in ("faster-rcnn", "mask-rcnn", "docstrum", "rlsa", "ppyolo", "efficientdet") else cv2.imread(image),
                 save_coco=save_coco_path,
                 save_image_path=args.save_image_path,
             )
