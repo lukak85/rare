@@ -89,7 +89,9 @@ def _extract_text_for_page(
         y0_pdf = y0n / 1000.0 * ph
         y1_pdf = y1n / 1000.0 * ph
         try:
-            cropped = pdf_page.within_bbox((x0, y0_pdf, x1, y1_pdf))
+            # TODO - figure out an ideal way to extract text from the boudning box based on overlap
+            # cropped = pdf_page.within_bbox((x0, y0_pdf, x1, y1_pdf))
+            cropped = pdf_page.crop((x0, y0_pdf, x1, y1_pdf), strict=False)
             results[region["region_id"]] = (cropped.extract_text() or "").strip()
         except Exception:
             results[region["region_id"]] = ""
@@ -136,8 +138,9 @@ def build_document(pdf_path: str, figures_dir: str = "figures", dpi: int = 200) 
 
     doc = GlasanaDocument(source_pdf=pdf_stem)
     fig_out_dir = Path(figures_dir) / pdf_stem
-    # Cache rendered page images so we only call pdf2image once per page
     rendered_pages: dict[int, Image.Image] = {}
+    # Persists across pages so articles spanning multiple pages are handled correctly
+    current_article: Article | None = None
 
     with pdfplumber.open(pdf_path) as pdf:
         for img_info in sorted(
@@ -171,8 +174,6 @@ def build_document(pdf_path: str, figures_dir: str = "figures", dpi: int = 200) 
                 rendered_pages[page_no] = convert_from_path(
                     pdf_path, dpi=dpi, first_page=page_no + 1, last_page=page_no + 1
                 )[0]
-
-            current_article: Article | None = None
 
             for reading_pos, region in enumerate(ordered_regions):
                 label = region["label"]

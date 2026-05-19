@@ -71,7 +71,7 @@ def draw_layout(
 
     viz = lp.draw_box(
         img,
-        [b.set(id=f"{b.score:.2f}/{b.type}" if has_score else f"{b.type}/{b.id}") for b in layout],
+        [b.set(id=f"{b.score:.2f}/{b.type}" if has_score else f"{b.type}") for b in layout],
         color_map=GLASANA_COLOR_MAP,
         show_element_id=True,
         id_font_size=10,
@@ -82,6 +82,24 @@ def draw_layout(
         order_line_width=order_line_width,
     )
     draw_pil_image(viz, save_path)
+
+def draw_text(
+    img,
+    layout,
+):
+    """Draw labeled bounding boxes on an image and display it.
+
+    Args:
+        img: Image (numpy array, BGR or RGB).
+        layout: A layoutparser Layout with TextBlocks.
+    """
+
+    print()
+    viz = lp.draw_text(
+        img,
+        [b.set(id=f"{b.type}/{b.id}") for b in layout],
+    )
+    draw_pil_image(viz)
 
 
 def _resolve_order(blocks, order):

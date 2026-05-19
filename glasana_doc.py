@@ -551,7 +551,13 @@ def _table_to_markdown(td: TableData) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def to_html(doc: GlasanaDocument, wrap_articles: bool = True, css_path: str = "glasana.css") -> str:
-    """Render body content as semantic HTML5."""
+    """Render body content as semantic HTML5.
+
+    Walks body_order directly so items always appear in reading order.
+    <article> tags open/close as article_id changes — orphaned items
+    (no article_id) are wrapped in their own anonymous <article> at the
+    correct position in the flow, not dumped at the end.
+    """
     title = doc.source_pdf or "Glasana"
     parts = [
         "<!DOCTYPE html>",
@@ -567,25 +573,23 @@ def to_html(doc: GlasanaDocument, wrap_articles: bool = True, css_path: str = "g
     ]
     seen: set[str] = set()
 
-    if wrap_articles and doc.articles:
-        for art in doc.articles.values():
-            parts.append(f'<article id="{art.article_id}">')
-            parts.append('<div class="article-body">')
-            for item in doc.iter_article(art.article_id):
-                parts.extend(_item_to_html(item, doc, seen))
-            parts.append("</div>")
-            parts.append("</article>")
-        art_items: set[str] = {iid for a in doc.articles.values() for iid in a.item_ids}
-        orphans = [iid for iid in doc.body_order if iid not in art_items]
-        if orphans:
-            parts.append('<article>')
-            parts.append('<div class="article-body">')
-            for iid in orphans:
-                item = doc.items.get(iid)
-                if item:
-                    parts.extend(_item_to_html(item, doc, seen))
-            parts.append("</div>")
-            parts.append("</article>")
+    if wrap_articles:
+        current_art_id: Optional[str] = "##sentinel##"  # forces first open
+
+        for item in doc.iter_body():
+            if item.article_id != current_art_id:
+                # Close previous article if one was open
+                if current_art_id != "##sentinel##":
+                    parts += ["</div>", "</article>"]
+                current_art_id = item.article_id
+                art = doc.articles.get(current_art_id) if current_art_id else None
+                art_id_attr = f' id="{current_art_id}"' if current_art_id else ""
+                parts += [f"<article{art_id_attr}>", '<div class="article-body">']
+
+            parts.extend(_item_to_html(item, doc, seen))
+
+        if current_art_id != "##sentinel##":
+            parts += ["</div>", "</article>"]
     else:
         parts.append('<div class="article-body">')
         for item in doc.iter_body():

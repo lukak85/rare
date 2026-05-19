@@ -5,6 +5,7 @@ import os
 import cv2
 from pycocotools.coco import COCO
 
+from layoutparser.visualization import draw_text
 from utils.displayutils import *
 from utils.fileutils import save_coco_to_json, read_json
 
@@ -133,7 +134,7 @@ def remove_duplicates(coco, annotations_file):
     }
 
 
-def visualize_annotations(coco, image_id, connections=None, save_path=None):
+def visualize_annotations(coco, image_id, connections=None, save_path=None, visualize_text=False):
     """Load and display annotations for a single image.
 
     Args:
@@ -141,6 +142,7 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None):
         image_id: The ID of the image to visualize.
         connections: A loaded JSON object containing connections between regions.
         save_path: Optional path to save the visualization.
+        visualize_text: Whether to draw extracted text next to the bounding boxes.
     """
     img_info = coco.loadImgs(coco.getImgIds([int(image_id)]))[0]
     img_path = os.path.join(IMAGES_ROOT, img_info["file_name"])
@@ -148,12 +150,15 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None):
     layout = load_coco_annotations(anns, categories=coco.cats)
     display_img = cv2.imread(img_path)
     positions = None
-    if connections:
-        id_map, tgt_index = build_id_map(anns, connections, img_info["file_name"], (img_info["width"], img_info["height"]))
-        coco_id_order = [id_map[i] for i in tgt_index if i in id_map]
-        index_map = {id_: i for i, id_ in enumerate(sorted(coco_id_order))}
-        positions = [index_map[id_] for id_ in coco_id_order]
-    draw_layout(display_img, layout, order=positions, save_path=save_path)
+    if visualize_text:
+        draw_text(display_img, layout)
+    else:
+        if connections:
+            id_map, tgt_index = build_id_map(anns, connections, img_info["file_name"], (img_info["width"], img_info["height"]))
+            coco_id_order = [id_map[i] for i in tgt_index if i in id_map]
+            index_map = {id_: i for i, id_ in enumerate(sorted(coco_id_order))}
+            positions = [index_map[id_] for id_ in coco_id_order]
+        draw_layout(display_img, layout, order=positions, save_path=save_path)
 
 
 def visualize_all_images(coco, save_path=None, skip_hashes=None):
@@ -307,6 +312,11 @@ if __name__ == "__main__":
         "-s", "--save-visualization",
         help="Path to save the annotation visualization",
         type=str,
+    )
+    parser.add_argument(
+        "-t", "--visualize-text",
+        help="Whether to visualize extracted text next to the bounding boxes",
+        action="store_true",
     )
 
     args = parser.parse_args()
@@ -511,4 +521,4 @@ if __name__ == "__main__":
         rec = None
         if args.connections_annotations_file:
             rec = json.load(open(args.connections_annotations_file))
-        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization)
+        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text)
