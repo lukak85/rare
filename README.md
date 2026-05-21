@@ -1,245 +1,191 @@
-# Automatic Segmentation and Topic Recognition (ASTR)
+# Razčlenjevalnik Revij (RaRe)
 
-A document layout analysis (DLA) pipeline built on top of
-[layoutparser](https://github.com/Layout-Parser/layout-parser) with planned support for segment topic recognition on top of it. It automatically detects and
-segments document elements (headings, paragraphs, figures, tables, captions, etc.) from page images or PDFs (or by
-extension a corpus). The pipeline outputs annotations in COCO format.
+RaRe is a parsing toolkit for Slovene magazines (primarily *Glasbena Mladina*), built on top of a fork of [layoutparser](https://github.com/Layout-Parser/layout-parser).
+It exposes two tracks for parsing PDFs and comparing models on annotated data:
 
-## Supported Models
+- **Pipeline track** — DLA model → reading-order → assembled `GlasanaDocument` → HTML / Markdown / JSON.
+- **VLM track** — vision-language model (cloud or locally-served) producing HTML / Markdown / JSON directly.
 
-### Main Models
-
-| Model              | Type                        | Description                                                                                                                       | Repository                                                                                                                                        |
-|--------------------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **DiT**            | Document Image Transformers | Document image transformer pre-trained via masked image modeling                                                                  | **[microsoft/unilm](https://github.com/microsoft/unilm/tree/master/dit)**                                                                         |
-| **DocLayout-YOLO** | Object detection            | YOLOv10-based model for document structure                                                                                        | **[opendatalab/DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                                                   |
-| **Faster R-CNN**   | CNN-Based                   | Two-stage detector using a Region Proposal Network to localize and classify layout regions                                        | Included in LayoutParser with detectron2                                                                                                          |
-| **LayoutLMv3**     | Multimodal                  | Jointly encodes text, layout, and image patches for document understanding                                                        | **[microsoft/unilm](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                                                  |
-| **Mask R-CNN**     | CNN-Based                   | Extends Faster R-CNN with a parallel branch that predicts segmentation masks per region                                           | Included in LayoutParser with detectron2                                                                                                          |
-| **PP-DocLayoutV3** | Transformer based           | Building on RT-DETR with support for non-planar segmentation, incorporating reading order prediction                              | **[PaddlePaddle/PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                                             |
-| **RF-DETR**        | Transformer based           | Roboflow's general purpose detector from the DETR family, built on DINOv2 transformer backbone, trained on DocLayNet for DLA task | **[neka-nat/rfdetr-doclayout](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                                                 |
-| **VGT**            | Multimodal                  | Vision grid transformer pretrained on MGLM and SLM and segment-level semantic understanding                                       | **[AlibabaResearch/AdvancedLiterateMachinery](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** |
-
-### Other Models
-
-| Model              | Type                        | Description                                                                                 | Repository                                                                                                                                        |
-|--------------------|-----------------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Docstrum**       | Bottom-up                   | Line-based document structure analysis                                                      | **[chulwoopack/docstrum](https://github.com/chulwoopack/docstrum)**                                                                               |
-| **Nemotron**       | Vision-language             | Nemotron Page Elements v3 built on top of YOLOX                                             | **[nvidia/nemotron-page-elements-v3](https://huggingface.co/nvidia/nemotron-page-elements-v3)**                                                   |
-
-<details>
-<summary><b>Work in Progress and Planned Models</b></summary>
-
-### Work in Progress Models
-
-| Model                | Type                  | Description | Repository                                                                                                       |
-|----------------------|-----------------------|-------------|------------------------------------------------------------------------------------------------------------------|
-| **DETR**             | TODO                  | TODO        | **[cmarkea/detr-layout-detection](https://huggingface.co/cmarkea/detr-layout-detection)**                        |
-| **Paragraph2Graph**  | Graph-Based           | TODO        | **[NormXU/Layout2Graph](https://github.com/NormXU/Layout2Graph)**                                                |
-| **MinerU**           | Vision language model | TODO        | **[opendatalab/mineru](https://github.com/opendatalab/mineru)**                                                  |
-| **Docling**          | Vision language model | TODO        | **[opendatalab/mineru](https://github.com/opendatalab/mineru)**                                                  |
-| **PaddleOCR**        | TODO                  | TODO        | **[opendatalab/mineru](https://github.com/opendatalab/mineru)**                                                  |
-| **Recursive-XY-cut** | TODO                  | TODO        | **[Ehsan1997/Recursive-XY-cut-Python](https://github.com/Ehsan1997/Recursive-XY-cut-Python)**                    |
-| **RLSA**             | TODO                  | TODO        | **[Vasistareddy/pythonRLSA](https://github.com/Vasistareddy/pythonRLSA)**                                        |
-| **DINO**             | Transformer-Based     | TODO        | **[IDEA-Research/DINO](https://github.com/IDEA-Research/DINO)**                                                  |
-| **VSR**              | TODO                  | TODO        | **[hikopensource/DAVAR-Lab-OCR](https://github.com/hikopensource/DAVAR-Lab-OCR/tree/main/demo/text_layout/VSR)** |
-| **M2Doc**            | Multimodal            | TODO        | **[johnning2333/M2Doc](https://github.com/johnning2333/M2Doc)**                                                  |
-| **DeepSeek-OCR**     | TODO                  | TODO        | **[deepseek-ai/DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR)**                                      |
-
-### Planned Models
-
-| Model               | Type              | Description | Repository                                                        |
-|---------------------|-------------------|-------------|-------------------------------------------------------------------|
-| **Doc-GCN**         | TODO              | TODO        | **[adlnlp/doc_gcn](https://github.com/adlnlp/doc_gcn)**           |
-| **DLAFormer**       | TODO              | TODO        | No public repository available                                    |
-</details>
+Pipelines track (at the moment) assumes presence of previously OCR-ed PDFs.
 
 ## Installation
 
-Install layoutparser in editable mode (from the project root):
+It is recommended to create a separate Conda environment for each of the intended models in order to avoid library and
+version clashes between different model's dependencies:
+
+```bash
+pip install -e .                   # core package + 'rare' command
+
+pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
+```
+
+For the LayoutParser fork itself:
 
 ```bash
 pip install -e layout-parser
 ```
 
-For model-specific dependencies, see [Model-Specific Setup](#model-specific-setup) below. It is recommended to create a separate Conda
-environment for each of the models.
+See [Model-specific setup](#model-specific-setup) below for additional per-model requirements.
 
 ## Usage
 
-### Running Layout Detection (`main.py`)
+The single `rare` command exposes three subcommands.
+
+### `rare parse` — parse a PDF
 
 ```bash
-python main.py -dm <model> -f <image_path> [options]
+# Pipeline track
+rare parse <pdf> --layout doclayout-yolo --order top-bottom
+
+# VLM track (mutually exclusive with --layout)
+rare parse <pdf> --vlm claude
+
+# Discover backends
+rare parse --list-models
 ```
 
-**Required arguments:**
-- `-dm`, `--dla-method` — DLA model: `detectron2`, `doclayout-yolo`, `docstrum`, `dotsocr`
-- `-f`, `--file` — Path to the input image or PDF image folder
+Outputs are stored in `outputs/parsed/<pdf_stem>/{<stem>.html, <stem>.md, <stem>_doc.json, figures/}`.
 
-**Optional arguments:**
-- `-m`, `--mode` — Processing mode: `page` (single image, default), `pdf` (all pages), or `corpus`
-- `-c`, `--config` — JSON configuration file for the model
-- `-s`, `--save` — Save detections as COCO JSON to this path
-- `-dd`, `--display-detection` — Display detected bounding boxes
-- `-dg`, `--display-ground` — Display ground-truth bounding boxes
-- `-e`, `--evaluation-metric` — Evaluate detections: `f1` or `map`
-- `-v`, `--verbose` — Enable verbose output
-- `-si`, `--save-image` — Save the visualization image
+### `rare evaluate` — score one model against a dataset
 
-**Examples:**
-
-Detect layout on a single page with DocLayout-YOLO and save COCO annotations:
 ```bash
-python main.py -m page \
-  -f ./dataset/images/example_page.jpg \
-  -dm doclayout-yolo \
-  -s ./results/output.json
+# Pipeline track — layout mAP + reading-order Kendall tau
+rare evaluate --track pipeline --dataset glasbena_mladina \
+    --layout doclayout-yolo --order top-bottom \
+    [--run-id myrun-2026-05] [--limit 5]
+
+# VLM track — F1 + edit-distance ratio against gold markdown
+rare evaluate --track vlm --dataset glasbena_mladina \
+    --vlm claude \
+    [--pdfs-dir dataset/pdfs] [--run-id myrun-2026-05]
 ```
 
-Detect layout for all pages of a PDF and display results:
+Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumulate models; `report.md` regenerates from every per-model JSON in the run directory.
+
+Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_model/}`.
+
+### `rare tools` — annotation utilities
+
 ```bash
-python main.py -m pdf \
-  -f ./dataset/images/document_hash \
-  -dm doclayout-yolo \
-  -s ./results \
-  -dd
+rare tools -m count-annotations -a dataset/annotations.json
+rare tools -m join-annotations -p results/<doc_hash>/ -o merged.json
+rare tools -m prepare-annotations -a merged.json -o cleaned.json
+rare tools -m review-annotations -a cleaned.json -s reviewed/
 ```
 
-Run with Docstrum and a custom configuration:
-```bash
-python main.py -m page \
-  -f ./dataset/images/example_page.jpg \
-  -dm docstrum \
-  -c ./configs/docstrum_config.json \
-  -v
+`rare tools -h` prints the full flag list (same as the old `helper.py`).
+
+## Supported Models
+
+### Pipeline track — layout backends
+
+| Model              | CLI name         | Type                        | Description                                                                                                                       | Repository                                                                                                                                        | Recommended Python version |
+|--------------------|------------------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| **DiT**            | `dit`            | Document Image Transformers | Document image transformer pre-trained via masked image modeling                                                                  | **[microsoft/unilm](https://github.com/microsoft/unilm/tree/master/dit)**                                                                         | TODO                       |
+| **DocLayout-YOLO** | `doclayout-yolo` | Object detection            | YOLOv10-based model for document structure                                                                                        | **[opendatalab/DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                                                   | 3.10                       |
+| **Faster R-CNN**   | `faster-rcnn`    | CNN-Based                   | Two-stage detector using a Region Proposal Network to localize and classify layout regions                                        | Included in LayoutParser with detectron2                                                                                                          | TODO                       |
+| **LayoutLMv3**     | `layoutlmv3`     | Multimodal                  | Jointly encodes text, layout, and image patches for document understanding                                                        | **[microsoft/unilm](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                                                  | TODO                       |
+| **Mask R-CNN**     | `mask-rcnn`      | CNN-Based                   | Extends Faster R-CNN with a parallel branch that predicts segmentation masks per region                                           | Included in LayoutParser with detectron2                                                                                                          | TODO                       |
+| **PP-DocLayoutV3** | `pp-doclayoutv3` | Transformer based           | Building on RT-DETR with support for non-planar segmentation, incorporating reading order prediction                              | **[PaddlePaddle/PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                                             | TODO                       |
+| **RF-DETR**        | `rf-detr`        | Transformer based           | Roboflow's general purpose detector from the DETR family, built on DINOv2 transformer backbone, trained on DocLayNet for DLA task | **[neka-nat/rfdetr-doclayout](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                                                 | TODO                       |
+| **VGT**            | `vgt`            | Multimodal                  | Vision grid transformer pretrained on MGLM and SLM and segment-level semantic understanding                                       | **[AlibabaResearch/AdvancedLiterateMachinery](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | TODO                       |
+
+### Pipeline track — reading-order backends
+
+| Model      | CLI name                 | Type       | Description                                                 |
+|------------|--------------------------|------------|-------------------------------------------------------------|
+| Top-bottom | `top-bottom` *(default)* | Rule based | Sort by region centroid (y, x). Robust baseline.            |
+
+### VLM track
+
+TODO
+
+## Outputs
+
+`outputs/parsed/<pdf_stem>/<stem>.json` is a `GlasanaDocument`:
+
+```json
+{
+  "source_pdf": "ac30fbcf...",
+  "pages":     {"0": {"page_no": 0, "width": ..., "height": ...}, ...},
+  "items":     {"<uuid>": {"category": "Headline", "text": "...", "provenance": {...}}, ...},
+  "body_order": ["<uuid>", ...],
+  "articles":  {"<uuid>": {"title": "...", "item_ids": [...]}}
+}
 ```
 
-### Managing Annotations (`helper.py`)
+`outputs/evaluations/<run_id>/report.md` is a Markdown table — one row per model, one column per metric:
 
-```bash
-python helper.py -m <mode> [options]
 ```
-
-**Modes:**
-- `join-annotations` — Merge multiple COCO JSON files into one
-- `prepare-annotations` — Join + deduplicate + visualize
-- `order-images` — Sort images and annotations by ID
-- `remove-scores` — Strip confidence scores from annotations
-- `review-annotations` — Visualize all annotations for review
-- `count-annotations` — Print per-category annotation counts and percentages
-
-**Examples:**
-
-Join annotation files from a folder:
-```bash
-python helper.py -m join-annotations \
-  -p ./results/document_hash/ \
-  -o ./results/document_hash/merged.json
-```
-
-Remove duplicate detections (IoU > 0.95):
-```bash
-python helper.py -r \
-  -a ./results/merged.json \
-  -o ./results/deduplicated.json
-```
-
-Visualize annotations for a specific image:
-```bash
-python helper.py \
-  -a ./results/merged.json \
-  -i 2028
-```
-
-Count annotations by category:
-```bash
-python helper.py -m count-annotations \
-  -a ./results/merged.json
+| Model                      | map    | map_50 | kendall_tau |
+|---|---|---|---|
+| doclayout-yolo__top-bottom | 0.6231 | 0.8104 | 0.7402      |
+| rf-detr__top-bottom        | 0.5984 | 0.7891 | 0.6951      |
 ```
 
 ## Project Structure
 
 ```
-automatic-segmentation-and-topic-recognition/
-├── main.py                  # Main DLA pipeline entry point
-├── helper.py                # Annotation management utilities
-├── utils/
-│   ├── conversionutils.py   # Layout-to-COCO format conversion
-│   ├── displayutils.py      # Bounding box visualization
-│   ├── evalutils.py         # Evaluation metrics
-│   └── fileutils.py         # JSON config and file I/O
-├── layout-parser/           # Extended layoutparser (git submodule)
-│   └── src/layoutparser/models/
-│       ├── dit/             # DiT model
-│       ├── doclayout_yolo/  # DocLayout-YOLO model
-│       ├── docstrum/        # Docstrum algorithm
-│       ├── dotsocr/         # DotsOCR vision-language model
-│       ├── layoutlmv3/      # LayoutLMv3 model
-│       ├── nemotron/        # Nemotron vision-language model
-│       └── vgt/             # VGT model
-└── annotation/              # Ground-truth COCO annotations
-    └── images/              # Document images
+rare/                         # installable package — entry point: rare = "rare.cli:main"
+├── cli.py                    # rare parse | evaluate | tools
+├── doc/{schema,renderers}.py # GlasanaDocument + 43 region classes + HTML/MD renderers
+├── models/
+│   ├── base.py               # LayoutBackend / ReadingOrderBackend / VLMBackend protocols
+│   ├── registry.py           # lazy registry; sets LAYOUTPARSER_BACKEND env var
+│   ├── layout/               # 15 layout adapters (one file per LP model family)
+│   ├── order/builtin.py      # top-bottom
+│   └── vlm/                  # !!!WIP!!!
+├── parse/                    # PDF → pages → layout → order → text → GlasanaDocument
+├── evaluate/                 # dataset loaders + pipeline/VLM metrics + runner + report
+├── tools/_helper.py          # annotation utilities
+└── utils/                    # eval / display / file / conversion / character helpers
+configs/                      # JSON configs per model
+data/                         # default path for model weights and model files
+datasets/                     # default path for datasets
+layout-parser/                # git submodule (layoutparser fork)
+outputs/                      # outputs/parsed/* + outputs/evaluations/*
 ```
 
-## Model-Specific Setup
+## Ground markdown
 
-### Docstrum
+_TODO (VLM track)_
 
-```bash
-pip install opencv-python scipy shapely
-```
+## Additional model-specific setup
 
-No model weights needed — Docstrum is a classical algorithm based on nearest-neighbor clustering of character centroids.
+### LayoutLMv3 / DiT
 
-### LayoutLMv3 and DiT
-
-The models use detectron2 as a detection backbone. For installation, follow these instructions:
-- [LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3#installation)
-- [DiT](https://github.com/microsoft/unilm/tree/master/layoutlmv3#installation)
+Detectron2 backbones. See the following links:
+- [LayoutLMv3 install notes](https://github.com/microsoft/unilm/tree/master/layoutlmv3#installation)
+- [DiT install notes](https://github.com/microsoft/unilm/tree/master/dit#setup)
 
 ### VGT
 
-The instructions for environment creation are presented in [VGT repository](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#install-requirements).
-The model requires each input image to have a `pkl` file containing the grid information neccessary for Grid Transformer. The
-process of creating such files are presented in the section [Generating grid information](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#generating-grid-information).
-The path of those files should then be passed to the layout-parser VGT implementation.
+See the [VGT install notes](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#install-requirements).
+This method requires `.pkl` grid file for each input image; point `rare parse` at it via `--config {"grid_root": "<path>"}`.
 
-### DocLayout-YOLO
+## Evaluation
 
-```bash
-pip install doclayout-yolo
-```
+Two approaches to evaluation are present:
+- manual (hand written functions for computation of mAP, normalized edit distance within the project)
+- using [OmniDocBench](/) - _TODO - add_.
 
-Download the model weights from [HuggingFace](https://huggingface.co/juliozhao/DocLayout-YOLO-DocStructBench) and place them in `./data/model/doclayoutyolo/`.
+# Results
 
-### DotsOCR
+_TODO_
 
-Recommended usage of vLLM server. Set up the environment by following the installation instructions on
-[dots.ocr](https://github.com/rednote-hilab/dots.ocr?tab=readme-ov-file#1-installation) repository. Then start the vLLM
-server before running detection:
+# Demo
 
-```bash
-CUDA_VISIBLE_DEVICES=0 vllm serve rednote-hilab/dots.mocr --tensor-parallel-size 1 \
-  --gpu-memory-utilization 0.9 --chat-template-content-format string \
-  --served-model-name model --trust-remote-code
-```
+_TODO_
 
-## Output Format
+# Limitations and Further Work
 
-Detections are saved in [COCO format](https://cocodataset.org/#format-data):
+Pipeline based track:
+- Built layout detection and reading order detection tasks are evaluated separately (reading order is evaluated using
+ground bounding boxes).
+- Currently RaRe only supports inference; possible extension includes training of the available models. 
 
-```json
-{
-  "images": [{"id": 1, "file_name": "page.jpg", "width": 800, "height": 1200}],
-  "annotations": [
-    {"id": 1, "image_id": 1, "category_id": 10, "bbox": [50, 100, 700, 200], "area": 140000}
-  ],
-  "categories": [
-    {"id": 5, "name": "Headline"},
-    {"id": 10, "name": "Paragraph"},
-    {"id": 13, "name": "Figure"},
-    {"id": 14, "name": "Caption"}
-  ]
-}
+# Citation
+
+```BibTeX
+TODO
 ```

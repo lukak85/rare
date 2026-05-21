@@ -11,3 +11,11 @@
 /literature/
 /layoutparserfork/
 /results/
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/

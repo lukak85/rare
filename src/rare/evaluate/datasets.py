@@ -1,0 +1,263 @@
+"""Dataset loaders for evaluation.
+
+Each loader returns an `EvalDataset` with per-page samples carrying ground
+layouts and (optionally) ground reading orders, plus per-PDF ground markdown
+for the VLM track.
+
+Importatn note: in Glasbena Mladina's ground annotations, `connections.json` region IDs do NOT
+match `annotations.json` COCO IDs. We match images by `file_name` and
+regions by IoU (see `_matching.match_by_iou`).
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Iterator, Optional
+
+from pycocotools.coco import COCO
+
+from rare.evaluate._matching import match_by_iou
+
+if TYPE_CHECKING:
+    import layoutparser as lp
+
+
+@dataclass
+class EvalSample:
+    image_path: Path
+    pdf_stem: str
+    page_no: int
+    image_id: int
+    width: int
+    height: int
+    ground_layout: "lp.Layout"
+    ground_order: Optional[list[int]] = None  # permutation over ground_layout
+
+
+@dataclass
+class EvalDataset:
+    name: str
+    samples: list[EvalSample]
+    ground_markdown: dict[str, str] = field(default_factory=dict)  # pdf_stem → md text
+
+    def iter_samples(self) -> Iterator[EvalSample]:
+        return iter(self.samples)
+
+    def by_pdf(self) -> dict[str, list[EvalSample]]:
+        out: dict[str, list[EvalSample]] = {}
+        for s in self.samples:
+            out.setdefault(s.pdf_stem, []).append(s)
+        for v in out.values():
+            v.sort(key=lambda s: s.page_no)
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _coco_to_layout(coco: COCO, image_id: int) -> "lp.Layout":
+    """Convert all COCO annotations for one image into an lp.Layout."""
+    import layoutparser as lp
+    layout = lp.Layout()
+    for ann in coco.loadAnns(coco.getAnnIds([image_id])):
+        x, y, w, h = ann["bbox"]
+        layout.append(
+            lp.TextBlock(
+                block=lp.Rectangle(x, y, x + w, y + h),
+                type=coco.cats[ann["category_id"]]["name"],
+                id=ann["id"],
+                score=ann.get("score", 1.0),
+            )
+        )
+    return layout
+
+
+def _connections_to_order(
+    entry: dict,
+    ground_layout: "lp.Layout",
+    img_w: int,
+    img_h: int,
+    iou_threshold: float = 0.3,
+) -> Optional[list[int]]:
+    import layoutparser as lp
+    """Translate a connections.json entry's reading order into a permutation
+    over `ground_layout` indices.
+
+    Strategy: build a temporary Layout from the connections regions (in
+    layoutreader-tgt order), then match each to ground_layout by IoU. The
+    resulting list of matched ground indices is the ground reading order.
+    Unmatched ground regions are appended at the end in their original order.
+    """
+    regions = entry.get("regions", [])
+    tgt_index = entry.get("layoutreader", {}).get("text", {}).get("tgt_index")
+    if not regions or not tgt_index:
+        return None
+
+    ordered_regions = [regions[i] for i in tgt_index if i < len(regions)]
+    conn_layout = lp.Layout()
+    for r in ordered_regions:
+        x0n, y0n, x1n, y1n = r["bbox_norm_1000"]
+        conn_layout.append(
+            lp.TextBlock(
+                block=lp.Rectangle(
+                    x0n / 1000.0 * img_w,
+                    y0n / 1000.0 * img_h,
+                    x1n / 1000.0 * img_w,
+                    y1n / 1000.0 * img_h,
+                ),
+                type=r.get("label", ""),
+            )
+        )
+
+    matched = dict(match_by_iou(conn_layout, ground_layout, iou_threshold=iou_threshold))
+    ground_indices_in_order = [matched[i] for i in range(len(conn_layout)) if i in matched]
+    matched_set = set(ground_indices_in_order)
+    tail = [j for j in range(len(ground_layout)) if j not in matched_set]
+    return ground_indices_in_order + tail
+
+
+# ---------------------------------------------------------------------------
+# Loaders
+# ---------------------------------------------------------------------------
+
+def load_glasbena_mladina(
+    root: str | Path = "datasets/glasbena_mladina",
+    images_dir: str | Path | None = None,
+    ground_markdown_dir: str | Path | None = None,
+) -> EvalDataset:
+    """Load the Glasbena Mladina annotated dataset.
+
+    Defaults to the existing layout (`dataset/annotations.json`,
+    `dataset/connections.json`, images alongside). Pass `images_dir` if your
+    image files live elsewhere.
+    """
+    root = Path(root)
+    ann_path = root / "annotations.json"
+    conn_path = root / "connections.json"
+    coco = COCO(str(ann_path))
+
+    connections = []
+    if conn_path.exists():
+        connections = json.loads(conn_path.read_text())
+    conn_by_filename = {Path(e["image"]).name: e for e in connections}
+
+    img_root = Path(images_dir) if images_dir else root
+    samples: list[EvalSample] = []
+    for image_id, info in coco.imgs.items():
+        file_name = info["file_name"]
+        # Extract pdf_stem and page_no from filename "<stem>_<page>.jpg"
+        stem_parts = file_name.rsplit("_", 1)
+        pdf_stem = stem_parts[0] if len(stem_parts) == 2 else file_name
+        try:
+            page_no = int(stem_parts[1].rsplit(".", 1)[0])
+        except (IndexError, ValueError):
+            page_no = 0
+
+        ground_layout = _coco_to_layout(coco, image_id)
+        conn_entry = conn_by_filename.get(file_name)
+        ground_order = (
+            _connections_to_order(conn_entry, ground_layout, info["width"], info["height"])
+            if conn_entry
+            else None
+        )
+
+        samples.append(EvalSample(
+            image_path=img_root / file_name,
+            pdf_stem=pdf_stem,
+            page_no=page_no,
+            image_id=image_id,
+            width=info["width"],
+            height=info["height"],
+            ground_layout=ground_layout,
+            ground_order=ground_order,
+        ))
+
+    # Optional ground markdown for the VLM track
+    ground_md: dict[str, str] = {}
+    md_dir = Path(ground_markdown_dir) if ground_markdown_dir else (root / "ground")
+    if md_dir.exists():
+        for f in md_dir.glob("*.md"):
+            ground_md[f.stem] = f.read_text()
+
+    return EvalDataset(name="glasbena_mladina", samples=samples, ground_markdown=ground_md)
+
+
+def load_doclaynet(
+    root: str | Path = "datasets/doclaynet",
+    split: str = "val",
+) -> EvalDataset:
+    """Load the DocLayNet COCO split. Looks for `COCO/<split>.json` and
+    `PNG/` images under `root`.
+    """
+    root = Path(root)
+    ann_path = root / "COCO" / f"{split}.json"
+    if not ann_path.exists():
+        # Fallbacks
+        candidates = list((root / "COCO").glob("*.json"))
+        if not candidates:
+            raise FileNotFoundError(f"No COCO JSON found under {root / 'COCO'}")
+        ann_path = candidates[0]
+
+    coco = COCO(str(ann_path))
+    img_root = root / "PNG"
+    samples: list[EvalSample] = []
+    for image_id, info in coco.imgs.items():
+        samples.append(EvalSample(
+            image_path=img_root / info["file_name"],
+            pdf_stem=Path(info["file_name"]).stem,
+            page_no=0,
+            image_id=image_id,
+            width=info["width"],
+            height=info["height"],
+            ground_layout=_coco_to_layout(coco, image_id),
+            ground_order=None,  # DocLayNet has no reading-order labels
+        ))
+    return EvalDataset(name=f"doclaynet/{ann_path.stem}", samples=samples)
+
+def load_publaynet(
+    root: str | Path = "datasets/publaynet",
+    split: str = "val",
+) -> EvalDataset:
+    """Load the PubLayNet COCO split. Looks for `<split>.json` and
+    `PNG/` images under `root`.
+    """
+    root = Path(root)
+    ann_path = root / f"{split}.json"
+    if not ann_path.exists():
+        # Fallbacks
+        candidates = list(root.glob("*.json"))
+        if not candidates:
+            raise FileNotFoundError(f"No COCO JSON found under {root}")
+        ann_path = candidates[0]
+
+    coco = COCO(str(ann_path))
+    img_root = root / "samples"
+    samples: list[EvalSample] = []
+    for image_id, info in coco.imgs.items():
+        samples.append(EvalSample(
+            image_path=img_root / info["file_name"],
+            pdf_stem=Path(info["file_name"]).stem,
+            page_no=0,
+            image_id=image_id,
+            width=info["width"],
+            height=info["height"],
+            ground_layout=_coco_to_layout(coco, image_id),
+            ground_order=None,  # DocLayNet has no reading-order labels
+        ))
+    return EvalDataset(name=f"publaynet/{ann_path.stem}", samples=samples)
+
+
+DATASETS = {
+    "glasbena_mladina": load_glasbena_mladina,
+    "doclaynet":        load_doclaynet,
+    "publaynet":        load_publaynet,
+}
+
+
+def load(name: str, **kwargs) -> EvalDataset:
+    if name not in DATASETS:
+        raise KeyError(f"Unknown dataset '{name}'. Available: {sorted(DATASETS)}")
+    return DATASETS[name](**kwargs)

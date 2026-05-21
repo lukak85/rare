@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rare"
+version = "0.1.0"
+description = "SLOvene MAgazine Parser."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "pycocotools",
+    "matplotlib",
+    "pydantic>=2",
+    "pdfplumber",
+    "pdf2image",
+    "pillow",
+    "opencv-python",
+    "torch",
+    "torchmetrics"
+]
+
+[project.optional-dependencies]
+# Install with: pip install -e ".[claude]" or pip install -e ".[vlm-all]"
+doclayout-yolo = ["doclayout-yolo", "huggingface-hub"]
+
+claude   = ["anthropic"]
+openai   = ["openai"]
+vlm-all  = ["anthropic", "openai"]
+# MinerU is installed separately: pip install -U "mineru[core]"
+
+[project.scripts]
+rare = "rare.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["rare*"]
+exclude = [
+    "layout-parser*",
+    "annotation*",
+    "data*",
+    "dataset*",
+    "datasets*",
+    "dataset4ls*",
+    "examples*",
+    "extracted*",
+    "results*",
+    "outputs*",
+    "scripts*",
+    "segmentation*",
+    "literature*",
+    "configs*",
+]

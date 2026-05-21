@@ -6,10 +6,10 @@ import cv2
 from pycocotools.coco import COCO
 
 from layoutparser.visualization import draw_text
-from utils.displayutils import *
-from utils.fileutils import save_coco_to_json, read_json
+from rare.utils.displayutils import *
+from rare.utils.fileutils import save_coco_to_json, read_json
 
-IMAGES_ROOT = "annotation/pawls/labels/images/"
+IMAGES_ROOT = "datasets/glasbena_mladina/images"
 PDF_ROOT = "annotation/pawls/skiff_files/apps/pawls/papers/"
 STATUS_JSON = "annotation/pawls/skiff_files/apps/pawls/papers/status/development_user@example.com.json"
 
@@ -98,8 +98,7 @@ def remove_duplicates(coco, annotations_file):
     from pycocotools import mask as maskUtils
 
     if not annotations_file:
-        print("Please provide an annotation file to remove duplicates from.")
-        exit(1)
+        raise ValueError("Please provide an annotation file to remove duplicates from.")
 
     coco_anns = coco.loadAnns(coco.getAnnIds())
 
@@ -244,7 +243,7 @@ def load_coco_bboxes(coco_path: str, image_id: int) -> list[dict]:
     Converts COCO [x, y, w, h] → {"id", "x0", "y0", "x1", "y1"}.
     """
     c = COCO(coco_path)
-    annotations = c.loadAnns(coco.getAnnIds([int(image_id)]))
+    annotations = c.loadAnns(c.getAnnIds([int(image_id)]))
 
     bboxes = []
     for ann in annotations:
@@ -263,8 +262,8 @@ def load_coco_bboxes(coco_path: str, image_id: int) -> list[dict]:
 # Entry point
 # ==============================================================================
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Document layout analysis helper")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="rare tools", description="Annotation management utilities (was helper.py)")
 
     parser.add_argument(
         "-a", "--annotations-file",
@@ -319,14 +318,14 @@ if __name__ == "__main__":
         action="store_true",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # ---- Mode dispatch ----
 
     if args.mode == "prepare-annotations":
         if not args.annotations_file:
             print("Please provide an annotation file to prepare.")
-            exit(1)
+            return 1
 
         # Join all annotations in the folder
         coco_data = join_annotations(args.annotations_file)
@@ -345,7 +344,7 @@ if __name__ == "__main__":
     elif args.mode == "order-images":
         if not args.annotations_file:
             print("Please provide an annotation file.")
-            exit(1)
+            return 1
 
         coco = COCO(args.annotations_file)
         sorted_images = sorted(coco.dataset["images"], key=lambda x: x["id"])
@@ -386,7 +385,7 @@ if __name__ == "__main__":
     elif args.mode == "review-annotations":
         if not args.annotations_file:
             print("Please provide an annotation file.")
-            exit(1)
+            return 1
 
         # Documents already reviewed — skip these when reviewing
         already_checked = {
@@ -428,14 +427,14 @@ if __name__ == "__main__":
     elif args.mode == "join-annotations":
         if not args.path:
             print("Please provide a folder path to join annotations.")
-            exit(1)
+            return 1
         coco_data = join_annotations(args.path)
         save_coco_to_json(coco_data, args.output_path)
 
     elif args.mode == "count-annotations":
         if not args.annotations_file:
             print("Please provide an annotation file.")
-            exit(1)
+            return 1
 
         coco = COCO(args.annotations_file)
         counts = {}
@@ -455,7 +454,7 @@ if __name__ == "__main__":
     elif args.mode == "assign-ids":
         if not args.path:
             print("Please provide a folder path to join annotations.")
-            exit(1)
+            return 1
         coco_data = read_json(args.path)
         for anno_id, annotation in enumerate(coco_data["annotations"]):
             annotation["id"] = anno_id
@@ -465,10 +464,10 @@ if __name__ == "__main__":
     elif args.mode == "text-extraction":
         if not args.annotations_file:
             print("Please provide an annotation file.")
-            exit(1)
+            return 1
         if not args.image_id:
             print("Please provide an image ID to extract text for.")
-            exit(1)
+            return 1
 
         coco = COCO(args.annotations_file)
         img_info = coco.loadImgs(coco.getImgIds([int(args.image_id)]))[0]
@@ -512,13 +511,20 @@ if __name__ == "__main__":
         # Default: visualize a single image's annotations
         if not args.annotations_file:
             print("Please provide an annotation file to visualize.")
-            exit(1)
+            return 1
         if not args.image_id:
             print("Please provide an image ID to visualize.")
-            exit(1)
+            return 1
 
         coco = COCO(args.annotations_file)
         rec = None
         if args.connections_annotations_file:
             rec = json.load(open(args.connections_annotations_file))
         visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text)
+
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main(sys.argv[1:]))

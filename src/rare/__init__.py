@@ -1,0 +1,1 @@
+"""RaRe — Razčlenjevalnik Revij."""

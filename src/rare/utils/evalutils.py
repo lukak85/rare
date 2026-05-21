@@ -91,3 +91,34 @@ def mean_average_precision(predictions, ground_truths):
     metric = MeanAveragePrecision(iou_type="bbox")
     metric.update(preds, targets)
     return metric.compute()
+
+
+def kendall_tau(a: list[int], b: list[int]) -> float:
+    """Kendall's tau-b on two rank sequences of equal length. O(n^2)."""
+    n = len(a)
+    if n < 2:
+        return 1.0
+    concordant = 0
+    discordant = 0
+    ties_a = 0
+    ties_b = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            da = a[i] - a[j]
+            db = b[i] - b[j]
+            if da == 0 and db == 0:
+                continue
+            if da == 0:
+                ties_a += 1
+                continue
+            if db == 0:
+                ties_b += 1
+                continue
+            if (da > 0) == (db > 0):
+                concordant += 1
+            else:
+                discordant += 1
+    total_a = concordant + discordant + ties_a
+    total_b = concordant + discordant + ties_b
+    denom = (total_a * total_b) ** 0.5
+    return (concordant - discordant) / denom if denom > 0 else 0.0
