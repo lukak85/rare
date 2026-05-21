@@ -25,7 +25,7 @@ For the LayoutParser fork itself:
 pip install -e layout-parser
 ```
 
-See [Model-specific setup](#model-specific-setup) below for additional per-model requirements.
+See [Additional model-specific setup](#additional-model-specific-setup) below for additional per-model requirements.
 
 ## Usage
 
