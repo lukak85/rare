@@ -22,7 +22,7 @@ from rare.evaluate.pipeline_eval import (
     score_order,
 )
 from rare.evaluate.report import write_report
-from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
+#from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
 from rare.doc.renderers import to_markdown
 from rare.utils.conversionutils import layout_parser_to_coco
 from rare.utils.fileutils import save_coco_to_json
@@ -71,10 +71,10 @@ def run_pipeline(
             "page_no":   sample.page_no,
             "file_name": sample.image_path.name,
         }
-        row.update(score_layout(predicted, sample.gold_layout))
-        if sample.gold_order is not None:
+        row.update(score_layout(predicted, sample.ground_layout))
+        if sample.ground_order is not None:
             row.update(score_order(
-                predicted, predicted_order, sample.gold_layout, sample.gold_order
+                predicted, predicted_order, sample.ground_layout, sample.ground_order
             ))
         per_image.append(row)
 
