@@ -17,13 +17,13 @@ dependencies = [
     "pdf2image",
     "pillow",
     "opencv-python",
-    "torch",
-    "torchmetrics"
 ]
 
 [project.optional-dependencies]
 # Install with: pip install -e ".[claude]" or pip install -e ".[vlm-all]"
-doclayout-yolo = ["doclayout-yolo", "huggingface-hub"]
+doclayout-yolo = ["doclayout-yolo", "huggingface-hub", "torch", "torchmetrics"]
+pp-doclayoutv3 = ["paddleocr[all]"]
+pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]
 
 claude   = ["anthropic"]
 openai   = ["openai"]

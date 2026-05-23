@@ -10,13 +10,15 @@ Pipelines track (at the moment) assumes presence of previously OCR-ed PDFs.
 
 ## Installation
 
-It is recommended to create a separate Conda environment for each of the intended models in order to avoid library and
-version clashes between different model's dependencies:
+Before running either of these, check [Additional model-specific setup](#additional-model-specific-setup) below for
+additional per-model requirements. Then run:
 
 ```bash
 pip install -e .                   # core package + 'rare' command
 
+# Model specific dependencies
 pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
+pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies 
 ```
 
 For the LayoutParser fork itself:
@@ -25,7 +27,8 @@ For the LayoutParser fork itself:
 pip install -e layout-parser
 ```
 
-See [Additional model-specific setup](#additional-model-specific-setup) below for additional per-model requirements.
+It is recommended to create a separate Conda environment for each of the intended models in order to avoid library and
+version clashes between different model's dependencies.
 
 ## Usage
 
@@ -79,22 +82,23 @@ rare tools -m review-annotations -a cleaned.json -s reviewed/
 
 ### Pipeline track — layout backends
 
-| Model              | CLI name         | Type                        | Description                                                                                                                       | Repository                                                                                                                                        | Recommended Python version |
-|--------------------|------------------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
-| **DiT**            | `dit`            | Document Image Transformers | Document image transformer pre-trained via masked image modeling                                                                  | **[microsoft/unilm](https://github.com/microsoft/unilm/tree/master/dit)**                                                                         | TODO                       |
-| **DocLayout-YOLO** | `doclayout-yolo` | Object detection            | YOLOv10-based model for document structure                                                                                        | **[opendatalab/DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                                                   | 3.10                       |
-| **Faster R-CNN**   | `faster-rcnn`    | CNN-Based                   | Two-stage detector using a Region Proposal Network to localize and classify layout regions                                        | Included in LayoutParser with detectron2                                                                                                          | TODO                       |
-| **LayoutLMv3**     | `layoutlmv3`     | Multimodal                  | Jointly encodes text, layout, and image patches for document understanding                                                        | **[microsoft/unilm](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                                                  | TODO                       |
-| **Mask R-CNN**     | `mask-rcnn`      | CNN-Based                   | Extends Faster R-CNN with a parallel branch that predicts segmentation masks per region                                           | Included in LayoutParser with detectron2                                                                                                          | TODO                       |
-| **PP-DocLayoutV3** | `pp-doclayoutv3` | Transformer based           | Building on RT-DETR with support for non-planar segmentation, incorporating reading order prediction                              | **[PaddlePaddle/PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                                             | TODO                       |
-| **RF-DETR**        | `rf-detr`        | Transformer based           | Roboflow's general purpose detector from the DETR family, built on DINOv2 transformer backbone, trained on DocLayNet for DLA task | **[neka-nat/rfdetr-doclayout](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                                                 | TODO                       |
-| **VGT**            | `vgt`            | Multimodal                  | Vision grid transformer pretrained on MGLM and SLM and segment-level semantic understanding                                       | **[AlibabaResearch/AdvancedLiterateMachinery](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | TODO                       |
+| Model                                                                                                       | CLI name         | Type                        | Recommended Python version               |
+|-------------------------------------------------------------------------------------------------------------|------------------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Document Image Transformers | _TODO_                                                                                                                              |
+| **[DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                         | `doclayout-yolo` | Object detection            | 3.10                                                                                                                              |
+| **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-Based                   | _TODO_                       |
+| **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal                  | _TODO_                       |
+| **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-Based                   | _TODO_                       |
+| **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Transformer based           | 3.12                       |
+| **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Transformer based           | TODO                       |
+| **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal                  | _TODO_                       |
+\* Included in LayoutParser with detectron2
 
 ### Pipeline track — reading-order backends
 
-| Model      | CLI name                 | Type       | Description                                                 |
-|------------|--------------------------|------------|-------------------------------------------------------------|
-| Top-bottom | `top-bottom` *(default)* | Rule based | Sort by region centroid (y, x). Robust baseline.            |
+| Model      | CLI name                 | Type       | Recommended Python version |
+|------------|--------------------------|------------|----------------------------|
+| Top-bottom | `top-bottom` *(default)* | Rule based | _TODO_                       |
 
 ### VLM track
 
@@ -158,10 +162,27 @@ Detectron2 backbones. See the following links:
 - [LayoutLMv3 install notes](https://github.com/microsoft/unilm/tree/master/layoutlmv3#installation)
 - [DiT install notes](https://github.com/microsoft/unilm/tree/master/dit#setup)
 
+### PP-DocLayoutV3
+
+Based on your CUDA version, use the fitting command from [PaddlePaddle install page](https://www.paddlepaddle.org.cn/en/install)
+to install `paddlepaddle`. For example, given CUDA version 12.8:
+
+```bash
+python -m pip install paddlepaddle-gpu==3.3.1 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+```
+
+If NVCC is not is not available, it must be installed. For example, given CUDA version 12.8:
+
+```bash
+conda install nvidia::cuda-nvcc==12.8.93
+```
+
 ### VGT
 
 See the [VGT install notes](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#install-requirements).
-This method requires `.pkl` grid file for each input image; point `rare parse` at it via `--config {"grid_root": "<path>"}`.
+This method requires `.pkl` grid file for each input image. Follow the instructions
+[VGT - Generating grid information](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#generating-grid-information)
+to generate them; point `rare parse` at it via `--config {"grid_root": "<path>"}`.
 
 ## Evaluation
 
