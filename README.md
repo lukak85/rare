@@ -92,6 +92,7 @@ rare tools -m review-annotations -a cleaned.json -s reviewed/
 | **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Transformer based           | 3.12                       |
 | **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Transformer based           | TODO                       |
 | **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal                  | _TODO_                       |
+
 \* Included in LayoutParser with detectron2
 
 ### Pipeline track — reading-order backends
