@@ -34,8 +34,8 @@ def cmd_parse(args: argparse.Namespace) -> int:
     if not args.pdf:
         print(
             "error: missing PDF path. Usage:\n"
-            "  astr parse <pdf> --layout <name> [--order <name>]\n"
-            "  astr parse <pdf> --vlm <name>",
+            "  rare parse <pdf> --layout <name> [--order <name>]\n"
+            "  rare parse <pdf> --vlm <name>",
             file=sys.stderr,
         )
         return 2
@@ -91,7 +91,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
     from rare.evaluate import datasets as ds_loader
 
-    dataset = ds_loader.load(args.dataset, root=args.data_root) if args.data_root \
+    dataset = ds_loader.load(args.dataset, root=args.data_root, images_dir=args.images_dir) if args.data_root \
               else ds_loader.load(args.dataset)
 
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -108,6 +108,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         order = order_cls()
 
         from rare.evaluate.runner import run_pipeline
+        images_dir = Path(args.images_dir) if args.images_dir else None
         agg = run_pipeline(dataset, layout, order, run_dir, limit=args.limit)
 
     elif args.track == "vlm":
@@ -193,6 +194,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument(
         "--pdfs-dir",
         help="Directory of PDFs for VLM evaluation (default: <data_root>/pdfs).",
+    )
+    p_eval.add_argument(
+        "--images-dir",
+        help="Directory of images for pipeline evaluation (default: <data_root>/images).",
     )
     p_eval.add_argument("--layout", help="Layout backend (pipeline track).")
     p_eval.add_argument("--order", default="top-bottom", help="Reading-order backend.")

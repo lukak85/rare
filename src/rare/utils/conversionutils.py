@@ -48,6 +48,7 @@ def layout_parser_to_coco(
     img_info,
     categories,
     category_mapping=DOCLAYOUT_YOLO_PUBLAY_TO_OUR_LABEL_MAP,
+    predicted_order=None,
 ):
     """Convert a layoutparser Layout to COCO annotation format.
 
@@ -56,10 +57,20 @@ def layout_parser_to_coco(
         img_info: Dict with image metadata (id, file_name, width, height).
         categories: COCO categories dict (unused — we use our own CATEGORIES).
         category_mapping: Dict mapping model label names to our category IDs.
+        predicted_order: Optional list[int] — a permutation of layout indices
+            such that layout[predicted_order[k]] is the k-th region in reading
+            order. When provided, each annotation gets an `order_id` field
+            with its 0-based reading-order rank; consumers sort by order_id
+            to walk the page in reading order.
 
     Returns:
         A COCO-format dict with 'images', 'annotations', and 'categories'.
     """
+    rank_by_layout_idx: dict[int, int] = {}
+    if predicted_order is not None:
+        for rank, layout_idx in enumerate(predicted_order):
+            rank_by_layout_idx[layout_idx] = rank
+
     annotations = []
 
     for idx, block in enumerate(layout, start=1):
@@ -68,7 +79,7 @@ def layout_parser_to_coco(
         width = x_max - x_min
         height = y_max - y_min
 
-        annotations.append({
+        ann = {
             "id": idx,
             "image_id": img_info["id"],
             "category_id": int(category_id),
@@ -76,7 +87,10 @@ def layout_parser_to_coco(
             "area": float(width * height),
             "iscrowd": False,
             "score": float(block.score) if hasattr(block, "score") else 1.0,
-        })
+        }
+        if predicted_order is not None:
+            ann["order_id"] = rank_by_layout_idx.get(idx - 1, -1)
+        annotations.append(ann)
 
     return {
         "images": [{

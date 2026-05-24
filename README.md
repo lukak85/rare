@@ -11,7 +11,8 @@ Pipelines track (at the moment) assumes presence of previously OCR-ed PDFs.
 ## Installation
 
 Before running either of these, check [Additional model-specific setup](#additional-model-specific-setup) below for
-additional per-model requirements. Then run:
+additional per-model requirements. Then run (if the code below doesn't include the desired model, no additional
+dependencies are needed):
 
 ```bash
 pip install -e .                   # core package + 'rare' command
@@ -82,28 +83,34 @@ rare tools -m review-annotations -a cleaned.json -s reviewed/
 
 ### Pipeline track — layout backends
 
-| Model                                                                                                       | CLI name         | Type                        | Recommended Python version               |
-|-------------------------------------------------------------------------------------------------------------|------------------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Document Image Transformers | _TODO_                                                                                                                              |
-| **[DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                         | `doclayout-yolo` | Object detection            | 3.10                                                                                                                              |
-| **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-Based                   | _TODO_                       |
-| **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal                  | _TODO_                       |
-| **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-Based                   | _TODO_                       |
-| **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Transformer based           | 3.12                       |
-| **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Transformer based           | TODO                       |
-| **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal                  | _TODO_                       |
+| Model                                                                                                       | CLI name         | Type                | Recommended Python version |
+|-------------------------------------------------------------------------------------------------------------|------------------|---------------------|----------------------------|
+| **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Vision transformers | _TODO_                     |
+| **[DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                         | `doclayout-yolo` | Object detection    | 3.10                       |
+| **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-based           | _TODO_                     |
+| **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal          | _TODO_                     |
+| **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | _TODO_                     |
+| **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Vision transformers | 3.12                       |
+| **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | _TODO_                     |
+| **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal          | _TODO_                     |
 
 \* Included in LayoutParser with detectron2
 
 ### Pipeline track — reading-order backends
 
-| Model      | CLI name                 | Type       | Recommended Python version |
-|------------|--------------------------|------------|----------------------------|
-| Top-bottom | `top-bottom` *(default)* | Rule based | _TODO_                       |
+| Model                                                                    | CLI name         | Type       | Recommended Python version |
+|--------------------------------------------------------------------------|------------------|------------|----------------------------|
+| Top-bottom                                                               | _Default_        | Rule based | Any                        |
+| **[PaddleX's Improved XY-Cut](https://github.com/PaddlePaddle/PaddleX)** | `paddlex-xy-cut` | Rule based | Any                        |
 
 ### VLM track
 
-TODO
+| Model                                                      | CLI name    | Type             | Recommended Python version |
+|------------------------------------------------------------|-------------|------------------|----------------------------|
+| **[Docling](https://github.com/docling-project/docling)**  | `docling`   | Specialized VLMs | Any                        |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**  | `dots-ocr`  | Specialized VLMs | Any                        |
+| **[MinerU](https://github.com/opendatalab/mineru)**        | `mineru`    | Specialized VLMs | Any                        |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)** | `paddleocr` | Specialized VLMs | Any                        |
 
 ## Outputs
 
@@ -185,6 +192,17 @@ This method requires `.pkl` grid file for each input image. Follow the instructi
 [VGT - Generating grid information](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#generating-grid-information)
 to generate them; point `rare parse` at it via `--config {"grid_root": "<path>"}`.
 
+---
+
+### MinerU
+
+As per MinerU [installation instructions](https://github.com/opendatalab/mineru#install-mineru), run the following commands:
+```bash
+pip install --upgrade pip
+pip install uv
+uv pip install -U "mineru[all]"
+```
+
 ## Evaluation
 
 Two approaches to evaluation are present:
@@ -204,7 +222,14 @@ _TODO_
 Pipeline based track:
 - Built layout detection and reading order detection tasks are evaluated separately (reading order is evaluated using
 ground bounding boxes).
-- Currently RaRe only supports inference; possible extension includes training of the available models. 
+- Currently RaRe only supports inference; possible extension includes training of the available models.
+- Adding support for Paragraph2Graph, M2Doc
+
+# Acknowledgements
+
+Thanks for the work of the authors of these projects:
+- [PaddleX](https://github.com/PaddlePaddle/PaddleX) — the improved XY-Cut reading-order backend is vendored from PaddleX (Apache-2.0); see `NOTICE` and `licenses/LICENSE-PADDLEX`.
+- [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)
 
 # Citation
 

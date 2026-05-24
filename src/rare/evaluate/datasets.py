@@ -75,6 +75,24 @@ def _coco_to_layout(coco: COCO, image_id: int) -> "lp.Layout":
     return layout
 
 
+def _order_id_to_order(coco: COCO, image_id: int) -> Optional[list[int]]:
+    """Build a reading-order permutation from per-annotation `order_id` fields.
+
+    Returns a list of `ground_layout` indices in reading order (so that
+    ground_layout[result[k]] is the k-th region), or None if the annotations
+    don't carry `order_id`. The layout index order matches `_coco_to_layout`,
+    since both iterate `coco.getAnnIds([image_id])` / `loadAnns` identically.
+
+    This is the precomputed alternative to `_connections_to_order`: the IoU
+    match against the LabelStudio export has already been baked into `order_id`
+    by scripts/join_annotations.py, so no matching happens at load time.
+    """
+    anns = coco.loadAnns(coco.getAnnIds([image_id]))
+    if not anns or any("order_id" not in a for a in anns):
+        return None
+    return sorted(range(len(anns)), key=lambda i: anns[i]["order_id"])
+
+
 def _connections_to_order(
     entry: dict,
     ground_layout: "lp.Layout",
@@ -127,15 +145,28 @@ def load_glasbena_mladina(
     root: str | Path = "datasets/glasbena_mladina",
     images_dir: str | Path | None = None,
     ground_markdown_dir: str | Path | None = None,
+    annotations_file: str | Path | None = None,
 ) -> EvalDataset:
     """Load the Glasbena Mladina annotated dataset.
 
     Defaults to the existing layout (`dataset/annotations.json`,
     `dataset/connections.json`, images alongside). Pass `images_dir` if your
     image files live elsewhere.
+
+    Reading order is taken from per-annotation `order_id` fields when present
+    (the precomputed join from scripts/join_annotations.py); otherwise it falls
+    back to IoU-matching `connections.json` at load time. `annotations_file`
+    overrides which COCO file to load; by default `annotations_with_order.json`
+    is preferred over `annotations.json` when it exists in `root`.
     """
     root = Path(root)
-    ann_path = root / "annotations.json"
+    if annotations_file is not None:
+        ann_path = Path(annotations_file)
+        if not ann_path.is_absolute():
+            ann_path = root / ann_path
+    else:
+        enriched = root / "annotations_with_order.json"
+        ann_path = enriched if enriched.exists() else root / "annotations.json"
     conn_path = root / "connections.json"
     coco = COCO(str(ann_path))
 
@@ -157,12 +188,16 @@ def load_glasbena_mladina(
             page_no = 0
 
         ground_layout = _coco_to_layout(coco, image_id)
-        conn_entry = conn_by_filename.get(file_name)
-        ground_order = (
-            _connections_to_order(conn_entry, ground_layout, info["width"], info["height"])
-            if conn_entry
-            else None
-        )
+        # Prefer the precomputed permutation in `order_id`; fall back to the
+        # connections.json IoU match only when annotations lack order_id.
+        ground_order = _order_id_to_order(coco, image_id)
+        if ground_order is None:
+            conn_entry = conn_by_filename.get(file_name)
+            ground_order = (
+                _connections_to_order(conn_entry, ground_layout, info["width"], info["height"])
+                if conn_entry
+                else None
+            )
 
         samples.append(EvalSample(
             image_path=img_root / file_name,

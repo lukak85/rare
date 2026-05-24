@@ -1,0 +1,18 @@
+RaRe
+Copyright (c) The RaRe contributors.
+
+This product includes software developed at:
+
+PaddlePaddle/PaddleX (https://github.com/PaddlePaddle/PaddleX)
+Copyright (c) 2024 PaddlePaddle Authors.
+Licensed under the Apache License, Version 2.0; see licenses/LICENSE-PADDLEX.
+
+The "xy-cut" reading-order backend at
+    src/rare/models/order/xycut_enhanced/
+is vendored from PaddleX's paddlex/inference/pipelines/layout_parsing/
+(modules: xycut_enhanced/__init__.py, xycut_enhanced/xycuts.py,
+ xycut_enhanced/utils.py, layout_objects.py, setting.py, plus a
+ cherry-picked subset of utils.py exported as support.py).
+The original per-file Apache-2.0 copyright headers are preserved; files
+whose import paths were rewritten to keep the package self-contained
+carry a "Modified from PaddlePaddle/PaddleX" comment below the header.

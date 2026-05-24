@@ -65,11 +65,12 @@ def run_pipeline(
         )
 
         row: dict = {
-            "model":     model_name,
-            "image_id":  sample.image_id,
-            "pdf_stem":  sample.pdf_stem,
-            "page_no":   sample.page_no,
-            "file_name": sample.image_path.name,
+            "model":         model_name,
+            "image_id":      sample.image_id,
+            "pdf_stem":      sample.pdf_stem,
+            "page_no":       sample.page_no,
+            "file_name":     sample.image_path.name,
+            "predicted_order": list(predicted_order),
         }
         row.update(score_layout(predicted, sample.ground_layout))
         if sample.ground_order is not None:
@@ -86,7 +87,10 @@ def run_pipeline(
                 "width":     sample.width,
                 "height":    sample.height,
             }
-            coco_predictions.append(layout_parser_to_coco(predicted, image_info, categories))
+            coco_predictions.append(layout_parser_to_coco(
+                predicted, image_info, categories,
+                predicted_order=predicted_order,
+            ))
 
     aggregates = pipeline_aggregate(per_image)
     _write_per_model(

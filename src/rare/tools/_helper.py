@@ -152,7 +152,10 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None, visu
     if visualize_text:
         draw_text(display_img, layout)
     else:
-        if connections:
+        # Prefer the precomputed permutation in `order_id`; fall back to the
+        # connections.json IoU match only when annotations lack order_id.
+        positions = order_from_order_id(anns)
+        if positions is None and connections:
             id_map, tgt_index = build_id_map(anns, connections, img_info["file_name"], (img_info["width"], img_info["height"]))
             coco_id_order = [id_map[i] for i in tgt_index if i in id_map]
             index_map = {id_: i for i, id_ in enumerate(sorted(coco_id_order))}
@@ -191,6 +194,20 @@ def iou(b1, b2):
     inter = max(0, xb - xa) * max(0, yb - ya)
     union = w1 * h1 + w2 * h2 - inter
     return inter / union if union > 0 else 0.0
+
+def order_from_order_id(anns):
+    """Reading-order permutation from per-annotation `order_id` fields.
+
+    `anns` is the list loaded for one image (layout index i <-> anns[i], since
+    load_coco_annotations preserves order). Returns a list of layout indices in
+    reading order — the `order` argument draw_layout expects — or None if the
+    annotations don't carry `order_id`. This is the precomputed alternative to
+    build_id_map (the IoU match is baked in by scripts/join_annotations.py).
+    """
+    if not anns or any("order_id" not in a for a in anns):
+        return None
+    return sorted(range(len(anns)), key=lambda i: anns[i]["order_id"])
+
 
 def build_id_map(layout_coco, reading_json, file_name, shape, iou_threshold=0.9):
     # Group COCO annotations by image_id for fast lookup
