@@ -23,6 +23,12 @@ from rare.evaluate.pipeline_eval import (
 )
 from rare.evaluate.report import write_report
 #from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
+from rare.evaluate.omnidocbench import (
+    coco_to_omnidocbench,
+    emit_stub_markdown,
+    merge_prediction_pages,
+    relabel_predictions_to_gt,
+)
 from rare.doc.renderers import to_markdown
 from rare.utils.conversionutils import layout_parser_to_coco
 from rare.utils.fileutils import save_coco_to_json
@@ -44,8 +50,32 @@ def run_pipeline(
     run_dir: Path,
     limit: Optional[int] = None,
     save_coco: bool = True,
+    emit_omnidocbench: bool = True,
+    category_map: Optional[dict[str, str]] = None,
+    pdfs_dir: Optional[Path] = None,
 ) -> dict:
-    """Run one (layout, order) combo over `dataset`, write per-model results."""
+    """Run one (layout, order) combo over `dataset`, write per-model results.
+
+    When `emit_omnidocbench` is true, also writes:
+      - `<run_dir>/omnidocbench/gt.json` — one OmniDocBench page list.
+      - `<run_dir>/omnidocbench/<model>_pred.json` — same shape, predictions.
+      - `<run_dir>/omnidocbench/markdown_pred_<model>/<image_stem>.md` — one
+        markdown file per page in predicted reading order; this is what
+        `scripts/omnidocbench/run.sh` mounts at `data_md/predictions`.
+
+    The `text` field per layout_det depends on `pdfs_dir`:
+      - If `pdfs_dir` resolves and a PDF for the page exists, real text is
+        extracted via `pdfplumber` and used (the "OCR-equivalent" path —
+        OmniDocBench's `reading_order` and `text_block` Edit_dist become
+        meaningful). Empty extracts (figures, ads) stay empty so quick_match
+        ignores them.
+      - Otherwise we fall back to stub tokens (`__B<anno_id>__` on GT;
+        IoU-matched GT tokens or `__UNMATCHED_<id>__` on predictions). This
+        still unblocks OmniDocBench but only measures box ordering.
+
+    `category_map` is an optional override merged on top of
+    `omnidocbench.DEFAULT_CATEGORY_MAP`.
+    """
     model_name = f"{layout.name}__{order.name}"
     per_image: list[dict] = []
     coco_predictions: list[dict] = []
@@ -106,6 +136,53 @@ def run_pipeline(
         coco_dir.mkdir(parents=True, exist_ok=True)
         for sample, payload in zip(samples, coco_predictions):
             save_coco_to_json(payload, str(coco_dir / f"{sample.image_id}.json"))
+
+    if emit_omnidocbench:
+        from rare.evaluate.pdf_text import PdfTextSource
+
+        odb_dir = run_dir / "omnidocbench"
+        odb_dir.mkdir(parents=True, exist_ok=True)
+
+        # Pick the text source: real PDF text when a PDF directory resolves,
+        # stub tokens otherwise. The PDF source needs cleanup of file handles,
+        # so own it for the duration of the emit.
+        pdf_text_source = None
+        pdf_root = _resolve_pdfs_dir(pdfs_dir, dataset)
+        if pdf_root is not None:
+            pdf_text_source = PdfTextSource(pdf_root)
+        use_stub = pdf_text_source is None
+
+        try:
+            # Ground truth: convert the source COCO file (whole dataset, not
+            # just the scored slice) once per run. Idempotent — overwriting
+            # is fine since the GT does not depend on the model.
+            gt_pages: list[dict] = []
+            if dataset.coco_path is not None:
+                gt_doc = json.loads(Path(dataset.coco_path).read_text())
+                gt_pages = coco_to_omnidocbench(
+                    gt_doc, category_map,
+                    text_stub=use_stub, text_source=pdf_text_source,
+                )
+                (odb_dir / "gt.json").write_text(json.dumps(gt_pages, indent=2))
+            # Predictions: one combined JSON per model. With real PDF text
+            # each pred box's own crop is queried; the IoU-to-GT relabel is
+            # only needed in stub mode (where tokens must match exactly).
+            if coco_predictions:
+                pred_pages = merge_prediction_pages(
+                    coco_predictions, category_map,
+                    text_stub=use_stub, text_source=pdf_text_source,
+                )
+                if use_stub and gt_pages:
+                    relabel_predictions_to_gt(pred_pages, gt_pages)
+                (odb_dir / f"{model_name}_pred.json").write_text(
+                    json.dumps(pred_pages, indent=2)
+                )
+                # Per-page markdown for OmniDocBench's `data_md/predictions` mount.
+                emit_stub_markdown(pred_pages, odb_dir / f"markdown_pred_{model_name}")
+        finally:
+            if pdf_text_source is not None:
+                pdf_text_source.close()
+
     _regenerate_report(run_dir, track="pipeline", dataset_name=dataset.name)
     return aggregates
 
@@ -177,6 +254,29 @@ def _resolve_pdf(pdfs_root: Optional[Path], stem: str) -> Optional[Path]:
     return None
 
 
+def _resolve_pdfs_dir(
+    explicit: Optional[Path], dataset: EvalDataset
+) -> Optional[Path]:
+    """Pick a directory of PDFs for the OmniDocBench text-extraction path.
+
+    Order: explicit `--pdfs-dir`, then `<dataset coco parent>/pdfs`,
+    `<dataset coco parent>/PDF` (DocLayNet convention), then the legacy
+    fallbacks shared with the VLM track. Returns None when nothing resolves;
+    the caller then drops back to stub-text mode.
+    """
+    candidates: list[Optional[Path]] = [explicit]
+    if dataset.coco_path is not None:
+        parent = Path(dataset.coco_path).parent
+        candidates += [parent / "pdfs", parent / "PDF"]
+    candidates += [Path("dataset/pdfs"), Path("data/glasbena_mladina/pdfs")]
+    for root in candidates:
+        if root is None:
+            continue
+        if root.exists() and root.is_dir():
+            return root
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Per-model dump + report regeneration
 # ---------------------------------------------------------------------------
@@ -211,7 +311,9 @@ def _regenerate_report(run_dir: Path, track: str, dataset_name: str) -> None:
             data = json.loads(fp.read_text())
         except Exception:
             continue
-        if data.get("track") != track:
+        # Only per-model result dicts contribute to the report. Skip anything
+        # else (e.g. a stale list-shaped export accidentally dropped here).
+        if not isinstance(data, dict) or data.get("track") != track:
             continue
         aggregates[data["model"]] = data.get("aggregates", {})
         per_image.extend(data.get("per_image", []))

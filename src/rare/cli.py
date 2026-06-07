@@ -31,11 +31,47 @@ def cmd_parse(args: argparse.Namespace) -> int:
             print(f"  - {n}")
         return 0
 
+    # COCO track — render an existing COCO layout (no detection step).
+    if args.coco:
+        if args.layout or args.vlm:
+            print("error: --coco cannot be combined with --layout or --vlm.", file=sys.stderr)
+            return 2
+        from rare.parse.coco import parse_coco
+
+        # Only build a reading-order backend when one is explicitly requested;
+        # otherwise the COCO `order_id` field (then top-bottom) is used directly.
+        order = None
+        if args.order and args.order != "top-bottom":
+            order = get("order", args.order)()
+
+        category_map = None
+        if args.category_map:
+            from rare.evaluate.omnidocbench import load_category_map
+            category_map = load_category_map(args.category_map)
+
+        out_dirs = parse_coco(
+            args.coco,
+            pdf_path=args.pdf,
+            images_dir=args.images_dir,
+            pdfs_dir=args.pdfs_dir,
+            order=order,
+            output_dir=args.output,
+            dpi=args.dpi,
+            emit_omnidocbench=args.emit_omnidocbench,
+            category_map=category_map,
+        )
+        for out in out_dirs:
+            print(f"Output written to: {out}")
+        if args.emit_omnidocbench:
+            print(f"OmniDocBench JSON written to: {Path(args.output) / 'omnidocbench.json'}")
+        return 0
+
     if not args.pdf:
         print(
             "error: missing PDF path. Usage:\n"
             "  rare parse <pdf> --layout <name> [--order <name>]\n"
-            "  rare parse <pdf> --vlm <name>",
+            "  rare parse <pdf> --vlm <name>\n"
+            "  rare parse --coco <coco.json> [--images-dir <dir>] [--pdfs-dir <dir>]",
             file=sys.stderr,
         )
         return 2
@@ -44,7 +80,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
         print("error: pass either --vlm or --layout, not both.", file=sys.stderr)
         return 2
     if not args.vlm and not args.layout:
-        print("error: one of --layout or --vlm is required.", file=sys.stderr)
+        print("error: one of --layout, --vlm, or --coco is required.", file=sys.stderr)
         return 2
 
     if args.vlm:
@@ -108,8 +144,17 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         order = order_cls()
 
         from rare.evaluate.runner import run_pipeline
+        from rare.evaluate.omnidocbench import load_category_map
         images_dir = Path(args.images_dir) if args.images_dir else None
-        agg = run_pipeline(dataset, layout, order, run_dir, limit=args.limit)
+        category_map = load_category_map(args.category_map) if args.category_map else None
+        pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else None
+        agg = run_pipeline(
+            dataset, layout, order, run_dir,
+            limit=args.limit,
+            emit_omnidocbench=args.emit_omnidocbench,
+            category_map=category_map,
+            pdfs_dir=pdfs_dir,
+        )
 
     elif args.track == "vlm":
         if not args.vlm:
@@ -154,6 +199,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="VLM-track backend (see --list-models). Mutually exclusive with --layout.",
     )
     p_parse.add_argument(
+        "--coco",
+        help="COCO-track: render an existing COCO layout JSON (ground truth or any "
+             "predictions) to HTML/MD/JSON, skipping detection. Mutually exclusive "
+             "with --layout/--vlm. Reading order uses per-annotation `order_id` when "
+             "present, then --order, then top-bottom.",
+    )
+    p_parse.add_argument(
+        "--images-dir",
+        help="COCO-track: directory of page images (for figure crops).",
+    )
+    p_parse.add_argument(
+        "--pdfs-dir",
+        help="COCO-track: directory of source PDFs (<stem>.pdf) used to fill region "
+             "text via pdfplumber. Without it, regions render with empty text.",
+    )
+    p_parse.add_argument(
+        "--emit-omnidocbench",
+        dest="emit_omnidocbench",
+        action="store_true",
+        help="COCO-track: also write <output>/omnidocbench.json (per-page list with "
+             "per-region text from the PDF) for evaluating VLMs against OmniDocBench.",
+    )
+    p_parse.add_argument(
+        "--category-map",
+        help="COCO-track: JSON file of {source_category_name: omnidocbench_category_type} "
+             "merged on top of the built-in default map (used by --emit-omnidocbench).",
+    )
+    p_parse.add_argument(
         "--config",
         help="JSON config file passed to the chosen backend.",
     )
@@ -193,7 +266,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_eval.add_argument(
         "--pdfs-dir",
-        help="Directory of PDFs for VLM evaluation (default: <data_root>/pdfs).",
+        help="Directory of PDFs. Used by the VLM track to parse documents, "
+             "and by the pipeline track to fill OmniDocBench `text` fields with "
+             "real PDF text (falls back to stub tokens when no PDF resolves). "
+             "Default: <data_root>/pdfs.",
     )
     p_eval.add_argument(
         "--images-dir",
@@ -214,6 +290,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output root (default: outputs/evaluations).",
     )
     p_eval.add_argument("--limit", type=int, help="Cap number of samples (for smoke tests).")
+    p_eval.add_argument(
+        "--emit-omnidocbench",
+        dest="emit_omnidocbench",
+        action="store_true",
+        default=True,
+        help="Also write OmniDocBench-shaped gt.json + per-model predictions JSON (default: on).",
+    )
+    p_eval.add_argument(
+        "--no-emit-omnidocbench",
+        dest="emit_omnidocbench",
+        action="store_false",
+        help="Disable the OmniDocBench export.",
+    )
+    p_eval.add_argument(
+        "--category-map",
+        help="Optional JSON file of {source_category_name: omnidocbench_category_type} "
+             "merged on top of the built-in default map.",
+    )
     p_eval.add_argument(
         "--list-models",
         action="store_true",

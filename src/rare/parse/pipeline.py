@@ -9,18 +9,11 @@ from typing import TYPE_CHECKING
 import pdfplumber
 
 from rare.doc.schema import (
-    AnyDocItem,
     Article,
-    BBox,
-    FigureItem,
     GlasanaDocument,
-    HeadlineItem,
-    LABEL_TO_CLASS,
     PageInfo,
-    ParagraphItem,
-    Provenance,
 )
-from rare.parse.figures import crop_and_save_figure
+from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
 from rare.parse.pdf import render_pages
 from rare.parse.text import extract_text_for_page
@@ -94,34 +87,16 @@ def parse_pdf(
 
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
 
-            for reading_pos, region in enumerate(regions):
-                label = region["label"]
-                bbox = BBox.from_norm_1000(region["bbox_norm_1000"], img_w, img_h)
-                prov = Provenance.from_bbox(
-                    page_no=page_no,
-                    bbox=bbox,
-                    detection_score=region.get("score"),
-                    source_region_id=region["region_id"],
-                )
-                text = texts.get(region["region_id"], "")
-                item_cls = LABEL_TO_CLASS.get(label, ParagraphItem)
-
-                kwargs = dict(provenance=prov, reading_order=reading_pos)
-                if item_cls is FigureItem:
-                    fig_path = figures_dir / f"p{page_no}_{region['region_id']}.jpg"
-                    crop_and_save_figure(page_image, region["bbox_norm_1000"], fig_path)
-                    item: AnyDocItem = FigureItem(image_path=str(fig_path), **kwargs)
-                else:
-                    item = item_cls(text=text, **kwargs)
-
-                if isinstance(item, HeadlineItem):
-                    current_article = Article(title=text)
-                    doc.add_article(current_article)
-
-                if current_article is not None:
-                    item.article_id = current_article.article_id
-                    current_article.item_ids.append(item.item_id)
-
-                doc.add_item(item)
+            current_article = assemble_page(
+                doc,
+                page_no=page_no,
+                regions=regions,
+                texts=texts,
+                img_w=img_w,
+                img_h=img_h,
+                figures_dir=figures_dir,
+                current_article=current_article,
+                page_image=page_image,
+            )
 
     return write_outputs(doc, output_dir)

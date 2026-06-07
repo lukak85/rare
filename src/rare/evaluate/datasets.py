@@ -41,6 +41,7 @@ class EvalDataset:
     name: str
     samples: list[EvalSample]
     ground_markdown: dict[str, str] = field(default_factory=dict)  # pdf_stem → md text
+    coco_path: Optional[Path] = None  # source COCO annotations file (for OmniDocBench export)
 
     def iter_samples(self) -> Iterator[EvalSample]:
         return iter(self.samples)
@@ -217,7 +218,12 @@ def load_glasbena_mladina(
         for f in md_dir.glob("*.md"):
             ground_md[f.stem] = f.read_text()
 
-    return EvalDataset(name="glasbena_mladina", samples=samples, ground_markdown=ground_md)
+    return EvalDataset(
+        name="glasbena_mladina",
+        samples=samples,
+        ground_markdown=ground_md,
+        coco_path=ann_path,
+    )
 
 
 def load_doclaynet(
@@ -250,7 +256,7 @@ def load_doclaynet(
             ground_layout=_coco_to_layout(coco, image_id),
             ground_order=None,  # DocLayNet has no reading-order labels
         ))
-    return EvalDataset(name=f"doclaynet/{ann_path.stem}", samples=samples)
+    return EvalDataset(name=f"doclaynet/{ann_path.stem}", samples=samples, coco_path=ann_path)
 
 def load_publaynet(
     root: str | Path = "datasets/publaynet",
@@ -282,7 +288,7 @@ def load_publaynet(
             ground_layout=_coco_to_layout(coco, image_id),
             ground_order=None,  # DocLayNet has no reading-order labels
         ))
-    return EvalDataset(name=f"publaynet/{ann_path.stem}", samples=samples)
+    return EvalDataset(name=f"publaynet/{ann_path.stem}", samples=samples, coco_path=ann_path)
 
 
 DATASETS = {
