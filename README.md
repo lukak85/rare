@@ -20,9 +20,11 @@ pip install -e .                   # core package + 'rare' command
 # Model specific dependencies
 pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
 pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies 
+
+pip install -e ".[docling]" # + Docling dependencies
 ```
 
-For the LayoutParser fork itself:
+For the LayoutParser fork:
 
 ```bash
 pip install -e layout-parser
@@ -81,6 +83,10 @@ rare tools -m review-annotations -a cleaned.json -s reviewed/
 
 ## Supported Models
 
+The supported models (and therefore given Python version recommendations) were testeed using:
+- Ubuntu 24.04
+- CUDA 12.8
+
 ### Pipeline track — layout backends
 
 | Model                                                                                                       | CLI name         | Type                | Recommended Python version |
@@ -107,10 +113,11 @@ rare tools -m review-annotations -a cleaned.json -s reviewed/
 
 | Model                                                      | CLI name    | Type             | Recommended Python version |
 |------------------------------------------------------------|-------------|------------------|----------------------------|
-| **[Docling](https://github.com/docling-project/docling)**  | `docling`   | Specialized VLMs | Any                        |
-| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**  | `dots-ocr`  | Specialized VLMs | Any                        |
-| **[MinerU](https://github.com/opendatalab/mineru)**        | `mineru`    | Specialized VLMs | Any                        |
-| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)** | `paddleocr` | Specialized VLMs | Any                        |
+| **[Docling](https://github.com/docling-project/docling)**  | `docling`   | Specialized VLMs | 3.14                       |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**  | `dots-ocr`  | Specialized VLMs | 3.12                       |
+| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**          | `glm-ocr`   | Specialized VLMs | 3.13                       |
+| **[MinerU](https://github.com/opendatalab/mineru)**        | `mineru`    | Specialized VLMs | 3.13                       |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)** | `paddleocr` | Specialized VLMs | 3.12                       |
 
 ## Outputs
 
@@ -194,6 +201,95 @@ to generate them; point `rare parse` at it via `--config {"grid_root": "<path>"}
 
 ---
 
+### Docling
+
+Follow the [installation instructions](https://www.docling.ai/). If you have a NVIDIA GPU with CUDA version 12.8, run:
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+
+### dots.ocr
+
+Install the appropriate Pytorch version according to your CUDA version. E.g., for CUDA 12.8:
+```bash
+pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+For faster inference, also install `flash-attn` and its required packages:
+```bash
+pip install psutil
+pip install flash-attn --no-build-isolation
+```
+
+Then clone the [dots.ocr](https://github.com/rednote-hilab/dots.ocr) repository and insall:
+````bash
+pip install -e .
+````
+
+Then install vLLM using `uv`:
+```bash
+pip install uv # If uv is not previously installed
+uv pip install vllm --torch-backend=cu128
+```
+
+If using GPU, vLLM also requires `nvcc`. If not available, install via:
+````bash
+conda install nvidia::cuda-nvcc==12.8.93
+````
+
+And run the vLLM server:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm serve rednote-hilab/dots.mocr --tensor-parallel-size 1 --gpu-memory-utilization 0.9 --chat-template-content-format string --served-model-name model --trust-remote-code
+```
+
+<details>
+<summary><b>Additional troubleshooting</b></summary>
+If your Pytorch and driver CUDA version are mismatched, try installing Pytorch using the commands above again.
+
+If needed, use a vLLM version below `0.20`:
+```bash
+pip install "vllm<0.20"
+```
+</details>
+
+
+### GLM-OCR
+
+Follow the [GLM-OCR](https://huggingface.co/zai-org/GLM-OCR#vllm) installation instructions. 
+
+Additionally, install `zai-sdk` for evaluation using OmniDocBench:
+```bash
+pip install zai-sdk
+```
+
+If using GPU, vLLM also requires `nvcc`. If not available, install via:
+````bash
+conda install nvidia::cuda-nvcc==12.8.93
+````
+
+Then run a vLLM server:
+```bash
+vllm serve zai-org/GLM-OCR --allowed-local-media-path --port 8080
+```
+
+<details>
+<summary><b>Additional troubleshooting</b></summary>
+Install an appropriate Pytorch version, if there is a mismatch, e.g. for CUDA 12.8:
+
+```bash
+pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+And reinstall vllm:
+```bash
+pip uninstall vllm
+pip install "vllm<0.20"
+```
+</details>
+
+
 ### MinerU
 
 As per MinerU [installation instructions](https://github.com/opendatalab/mineru#install-mineru), run the following commands:
@@ -202,6 +298,45 @@ pip install --upgrade pip
 pip install uv
 uv pip install -U "mineru[all]"
 ```
+
+Install CUDA driver compatible Pytorch version. If you have a NVIDIA GPU with CUDA version 12.8, run:
+```bash
+pip install torch==2.9.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+
+Install `vllm` module for inference acceleration:
+```bash
+uv pip install "mineru[core,vllm]"
+```
+
+<details>
+<summary><b>Additional troubleshooting</b></summary>
+In our tests, we encountered the following errors, and fixed them the following ways:
+
+- `RuntimeError: flashinfer-cubin version (0.6.8.post1) does not match flashinfer version (0.5.3). Please install the same version of both packages. Set FLASHINFER_DISABLE_VERSION_CHECK=1 to bypass this check.`
+    ```bash
+    pip install -U "flashinfer-python==0.6.8" "flashinfer-cubin==0.6.8"
+    ```
+
+- `Permission denied: 'nvcc'`
+    ```bash
+    conda install nvidia::cuda-nvcc==12.8.93
+    ```
+</details>
+
+
+### PaddleOCR
+
+As per instructions, given CUDA 12.8, install:
+```bash
+ python -m pip install paddlepaddle-gpu==3.3.1 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+```
+
+And then:
+```bash
+python -m pip install "paddleocr[all]"
+```
+
 
 ## Evaluation
 

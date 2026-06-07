@@ -127,8 +127,12 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
     from rare.evaluate import datasets as ds_loader
 
-    dataset = ds_loader.load(args.dataset, root=args.data_root, images_dir=args.images_dir) if args.data_root \
-              else ds_loader.load(args.dataset)
+    ds_loader_kwargs = {}
+    if args.data_root:
+        ds_loader_kwargs["root"]=args.data_root
+    if args.images_dir:
+        ds_loader_kwargs["images_dir"]=args.images_dir
+    dataset = ds_loader.load(args.dataset, **ds_loader_kwargs)
 
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = Path(args.output) / run_id
