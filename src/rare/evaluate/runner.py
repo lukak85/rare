@@ -251,6 +251,11 @@ def run_vlm(
     per_doc: list[dict] = []
     parsed_docs: list[tuple[str, object]] = []  # (pdf_stem, GlasanaDocument)
 
+    # Specialized parsers (e.g. MinerU) emit their own markdown per block; we
+    # then score that verbatim rather than re-applying label-derived markup.
+    # Chat VLMs leave this False and go through the structured renderer.
+    raw_markdown = bool(getattr(vlm, "raw_markdown", False))
+
     # Resolve PDFs: use `pdfs_dir` if given, else assume `<dataset_root>/pdfs/`.
     # If neither yields a match for a stem, skip that document.
     pdfs_root = pdfs_dir
@@ -269,7 +274,7 @@ def run_vlm(
 
         doc = vlm.parse_pdf(pdf_path)
         parsed_docs.append((pdf_stem, doc))
-        predicted_md = to_markdown(doc)
+        predicted_md = to_markdown(doc, raw=raw_markdown)
         row = {
             "model":    model_name,
             "pdf_stem": pdf_stem,
@@ -289,6 +294,7 @@ def run_vlm(
             pdfs_dir=pdfs_dir,
             category_map=category_map,
             omnidocbench_image=omnidocbench_image,
+            raw_markdown=raw_markdown,
         ))
 
     _write_per_model(
@@ -311,6 +317,7 @@ def _run_vlm_omnidocbench(
     pdfs_dir: Optional[Path],
     category_map: Optional[dict[str, str]],
     omnidocbench_image: Optional[str],
+    raw_markdown: bool = False,
 ) -> dict[str, float]:
     """Emit OmniDocBench artifacts for parsed VLM docs and run the container.
 
@@ -348,7 +355,7 @@ def _run_vlm_omnidocbench(
     markdown_dir = odb_dir / f"markdown_pred_{model_name}"
     markdown_dir.mkdir(parents=True, exist_ok=True)
     for pdf_stem, doc in parsed_docs:
-        for page_no, page_md in to_markdown_pages(doc).items():
+        for page_no, page_md in to_markdown_pages(doc, raw=raw_markdown).items():
             (markdown_dir / f"{pdf_stem}_{page_no}.md").write_text(page_md)
 
     return run_eval(

@@ -44,7 +44,7 @@ from .schema import (
 # Markdown renderer
 # ---------------------------------------------------------------------------
 
-def to_markdown_pages(doc: GlasanaDocument) -> dict[int, str]:
+def to_markdown_pages(doc: GlasanaDocument, raw: bool = False) -> dict[int, str]:
     """Render the document to one markdown string per page, keyed by page_no.
 
     Splits `body_order` by each item's `provenance.page_no`, then renders each
@@ -61,13 +61,28 @@ def to_markdown_pages(doc: GlasanaDocument) -> dict[int, str]:
             continue
         by_page.setdefault(item.provenance.page_no, []).append(iid)
     return {
-        page_no: to_markdown(doc.model_copy(update={"body_order": iids}))
+        page_no: to_markdown(doc.model_copy(update={"body_order": iids}), raw=raw)
         for page_no, iids in by_page.items()
     }
 
 
-def to_markdown(doc: GlasanaDocument) -> str:
-    """Render body content as GitHub-Flavored Markdown."""
+def to_markdown(doc: GlasanaDocument, raw: bool = False) -> str:
+    """Render body content as GitHub-Flavored Markdown.
+
+    With `raw=True`, emit each body item's text verbatim (joined by blank
+    lines) without any label-derived markup. This mirrors specialized parsers
+    that already produce their own markdown per block (e.g. MinerU's
+    `images_to_markdown`, which concatenates each block's `content`), so
+    OmniDocBench scores the model's own text rather than text we re-marked-up.
+    """
+    if raw:
+        parts = [
+            item.text
+            for item in doc.iter_body()
+            if getattr(item, "text", "").strip()
+        ]
+        return "\n\n".join(parts)
+
     lines: list[str] = []
     seen: set[str] = set()  # item_ids already emitted (e.g. captions inside figures)
 
