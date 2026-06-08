@@ -44,6 +44,28 @@ from .schema import (
 # Markdown renderer
 # ---------------------------------------------------------------------------
 
+def to_markdown_pages(doc: GlasanaDocument) -> dict[int, str]:
+    """Render the document to one markdown string per page, keyed by page_no.
+
+    Splits `body_order` by each item's `provenance.page_no`, then renders each
+    page's slice through `to_markdown`. Used by the OmniDocBench VLM track,
+    whose end2end evaluator matches predictions per page (`<stem>_<page>.md`)
+    rather than per document. Pages present in `doc.pages` but with no body
+    items still get an entry (empty string) so prediction files stay aligned
+    with the ground-truth page set.
+    """
+    by_page: dict[int, list[str]] = {p: [] for p in doc.pages}
+    for iid in doc.body_order:
+        item = doc.items.get(iid)
+        if item is None:
+            continue
+        by_page.setdefault(item.provenance.page_no, []).append(iid)
+    return {
+        page_no: to_markdown(doc.model_copy(update={"body_order": iids}))
+        for page_no, iids in by_page.items()
+    }
+
+
 def to_markdown(doc: GlasanaDocument) -> str:
     """Render body content as GitHub-Flavored Markdown."""
     lines: list[str] = []

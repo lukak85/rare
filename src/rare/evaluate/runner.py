@@ -22,14 +22,14 @@ from rare.evaluate.pipeline_eval import (
     score_order,
 )
 from rare.evaluate.report import write_report
-#from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
+from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
 from rare.evaluate.omnidocbench import (
     coco_to_omnidocbench,
     emit_stub_markdown,
     merge_prediction_pages,
     relabel_predictions_to_gt,
 )
-from rare.doc.renderers import to_markdown
+from rare.doc.renderers import to_markdown, to_markdown_pages
 from rare.utils.conversionutils import layout_parser_to_coco
 from rare.utils.fileutils import save_coco_to_json
 
@@ -37,6 +37,30 @@ from rare.utils.fileutils import save_coco_to_json
 def _open_image(path):
     from PIL import Image
     return Image.open(path)
+
+
+def _write_omnidocbench_gt(
+    dataset: EvalDataset,
+    odb_dir: Path,
+    category_map: Optional[dict[str, str]],
+    text_stub: bool,
+    text_source,
+) -> tuple[Optional[Path], list[dict]]:
+    """Build `<odb_dir>/gt.json` from the dataset's source COCO and return
+    `(gt_path, gt_pages)`. Shared by the pipeline and VLM tracks so both score
+    against an identically-built ground truth. Returns `(None, [])` when the
+    dataset has no COCO file. The GT does not depend on the model, so writing
+    is idempotent across runs.
+    """
+    if dataset.coco_path is None:
+        return None, []
+    gt_doc = json.loads(Path(dataset.coco_path).read_text())
+    gt_pages = coco_to_omnidocbench(
+        gt_doc, category_map, text_stub=text_stub, text_source=text_source,
+    )
+    gt_path = odb_dir / "gt.json"
+    gt_path.write_text(json.dumps(gt_pages, indent=2))
+    return gt_path, gt_pages
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +77,8 @@ def run_pipeline(
     emit_omnidocbench: bool = True,
     category_map: Optional[dict[str, str]] = None,
     pdfs_dir: Optional[Path] = None,
+    run_omnidocbench: bool = False,
+    omnidocbench_image: Optional[str] = None,
 ) -> dict:
     """Run one (layout, order) combo over `dataset`, write per-model results.
 
@@ -123,14 +149,6 @@ def run_pipeline(
             ))
 
     aggregates = pipeline_aggregate(per_image)
-    _write_per_model(
-        run_dir=run_dir,
-        model_name=model_name,
-        track="pipeline",
-        dataset_name=dataset.name,
-        aggregates=aggregates,
-        per_image=per_image,
-    )
     if save_coco and coco_predictions:
         coco_dir = run_dir / "per_model" / f"{model_name}_coco"
         coco_dir.mkdir(parents=True, exist_ok=True)
@@ -152,18 +170,13 @@ def run_pipeline(
             pdf_text_source = PdfTextSource(pdf_root)
         use_stub = pdf_text_source is None
 
+        gt_path: Optional[Path] = None
+        markdown_dir: Optional[Path] = None
         try:
-            # Ground truth: convert the source COCO file (whole dataset, not
-            # just the scored slice) once per run. Idempotent — overwriting
-            # is fine since the GT does not depend on the model.
-            gt_pages: list[dict] = []
-            if dataset.coco_path is not None:
-                gt_doc = json.loads(Path(dataset.coco_path).read_text())
-                gt_pages = coco_to_omnidocbench(
-                    gt_doc, category_map,
-                    text_stub=use_stub, text_source=pdf_text_source,
-                )
-                (odb_dir / "gt.json").write_text(json.dumps(gt_pages, indent=2))
+            gt_path, gt_pages = _write_omnidocbench_gt(
+                dataset, odb_dir, category_map,
+                text_stub=use_stub, text_source=pdf_text_source,
+            )
             # Predictions: one combined JSON per model. With real PDF text
             # each pred box's own crop is queried; the IoU-to-GT relabel is
             # only needed in stub mode (where tokens must match exactly).
@@ -178,11 +191,35 @@ def run_pipeline(
                     json.dumps(pred_pages, indent=2)
                 )
                 # Per-page markdown for OmniDocBench's `data_md/predictions` mount.
-                emit_stub_markdown(pred_pages, odb_dir / f"markdown_pred_{model_name}")
+                markdown_dir = odb_dir / f"markdown_pred_{model_name}"
+                emit_stub_markdown(pred_pages, markdown_dir)
         finally:
             if pdf_text_source is not None:
                 pdf_text_source.close()
 
+        # Approach C: run OmniDocBench's pinned container against the artifacts
+        # we just emitted, and fold the Edit-distance numbers into `aggregates`
+        # so they appear as columns in report.md. Per-model result dir keeps
+        # accumulated models from clobbering each other's `predictions_*` files.
+        if run_omnidocbench and gt_path is not None and markdown_dir is not None:
+            from rare.evaluate.omnidocbench_docker import run_eval, DEFAULT_IMAGE
+
+            odb_metrics = run_eval(
+                gt_path=gt_path,
+                pred_md_dir=markdown_dir,
+                result_dir=odb_dir / f"results_{model_name}",
+                image=omnidocbench_image or DEFAULT_IMAGE,
+            )
+            aggregates.update(odb_metrics)
+
+    _write_per_model(
+        run_dir=run_dir,
+        model_name=model_name,
+        track="pipeline",
+        dataset_name=dataset.name,
+        aggregates=aggregates,
+        per_image=per_image,
+    )
     _regenerate_report(run_dir, track="pipeline", dataset_name=dataset.name)
     return aggregates
 
@@ -197,21 +234,33 @@ def run_vlm(
     run_dir: Path,
     pdfs_dir: Optional[Path] = None,
     limit: Optional[int] = None,
+    run_omnidocbench: bool = False,
+    omnidocbench_image: Optional[str] = None,
+    category_map: Optional[dict[str, str]] = None,
 ) -> dict:
-    """Run one VLM over the dataset's PDFs, scoring against gold markdown."""
+    """Run one VLM over the dataset's PDFs, scoring against gold markdown.
+
+    When `run_omnidocbench` is set, also emit OmniDocBench artifacts and run the
+    pinned container (see `run_pipeline` for the same flow on the pipeline
+    track). The VLM emits *real* text, so the ground truth must be built with
+    real PDF text too — stub-token GT would never match and every page would
+    score the max Edit distance. We therefore require a resolvable PDF directory
+    and skip the container (with a warning) when none is found.
+    """
     model_name = vlm.name
     per_doc: list[dict] = []
+    parsed_docs: list[tuple[str, object]] = []  # (pdf_stem, GlasanaDocument)
 
     # Resolve PDFs: use `pdfs_dir` if given, else assume `<dataset_root>/pdfs/`.
     # If neither yields a match for a stem, skip that document.
     pdfs_root = pdfs_dir
-    pdf_stems = list(dataset.gold_markdown.keys())
+    pdf_stems = list(dataset.ground_markdown.keys())
     if limit:
         pdf_stems = pdf_stems[:limit]
 
     for pdf_stem in pdf_stems:
-        gold_md = dataset.gold_markdown.get(pdf_stem)
-        if gold_md is None:
+        ground_md = dataset.ground_markdown.get(pdf_stem)
+        if ground_md is None:
             continue
         pdf_path = _resolve_pdf(pdfs_root, pdf_stem)
         if pdf_path is None:
@@ -219,12 +268,13 @@ def run_vlm(
             continue
 
         doc = vlm.parse_pdf(pdf_path)
+        parsed_docs.append((pdf_stem, doc))
         predicted_md = to_markdown(doc)
         row = {
             "model":    model_name,
             "pdf_stem": pdf_stem,
         }
-        row.update(score_text(predicted_md, gold_md))
+        row.update(score_text(predicted_md, ground_md))
         per_doc.append(row)
 
         out = run_dir / "per_model" / f"{model_name}__{pdf_stem}.md"
@@ -232,6 +282,15 @@ def run_vlm(
         out.write_text(predicted_md)
 
     aggregates = vlm_aggregate(per_doc)
+
+    if run_omnidocbench and parsed_docs:
+        aggregates.update(_run_vlm_omnidocbench(
+            dataset, run_dir, model_name, parsed_docs,
+            pdfs_dir=pdfs_dir,
+            category_map=category_map,
+            omnidocbench_image=omnidocbench_image,
+        ))
+
     _write_per_model(
         run_dir=run_dir,
         model_name=model_name,
@@ -242,6 +301,62 @@ def run_vlm(
     )
     _regenerate_report(run_dir, track="vlm", dataset_name=dataset.name)
     return aggregates
+
+
+def _run_vlm_omnidocbench(
+    dataset: EvalDataset,
+    run_dir: Path,
+    model_name: str,
+    parsed_docs: list[tuple[str, object]],
+    pdfs_dir: Optional[Path],
+    category_map: Optional[dict[str, str]],
+    omnidocbench_image: Optional[str],
+) -> dict[str, float]:
+    """Emit OmniDocBench artifacts for parsed VLM docs and run the container.
+
+    Returns the parsed Edit-distance metrics (empty on any skip/failure). The
+    per-page prediction files are named `<pdf_stem>_<page>.md`, matching the
+    GT page stems (`<pdf_stem>_<page>.jpg`) produced from the dataset COCO.
+    """
+    from rare.evaluate.omnidocbench_docker import run_eval, DEFAULT_IMAGE
+    from rare.evaluate.pdf_text import PdfTextSource
+
+    odb_dir = run_dir / "omnidocbench"
+    odb_dir.mkdir(parents=True, exist_ok=True)
+
+    # Real-text GT is mandatory here (see run_vlm docstring). Bail loudly rather
+    # than silently producing all-1.0 scores against stub tokens.
+    pdf_root = _resolve_pdfs_dir(pdfs_dir, dataset)
+    if pdf_root is None:
+        print("[omnidocbench] VLM track needs a resolvable --pdfs-dir to build "
+              "real-text ground truth; skipping container eval.")
+        return {}
+
+    pdf_text_source = PdfTextSource(pdf_root)
+    try:
+        gt_path, _ = _write_omnidocbench_gt(
+            dataset, odb_dir, category_map,
+            text_stub=False, text_source=pdf_text_source,
+        )
+    finally:
+        pdf_text_source.close()
+    if gt_path is None:
+        print("[omnidocbench] dataset has no COCO file for ground truth; skipping.")
+        return {}
+
+    # One markdown file per page in OmniDocBench's expected flat layout.
+    markdown_dir = odb_dir / f"markdown_pred_{model_name}"
+    markdown_dir.mkdir(parents=True, exist_ok=True)
+    for pdf_stem, doc in parsed_docs:
+        for page_no, page_md in to_markdown_pages(doc).items():
+            (markdown_dir / f"{pdf_stem}_{page_no}.md").write_text(page_md)
+
+    return run_eval(
+        gt_path=gt_path,
+        pred_md_dir=markdown_dir,
+        result_dir=odb_dir / f"results_{model_name}",
+        image=omnidocbench_image or DEFAULT_IMAGE,
+    )
 
 
 def _resolve_pdf(pdfs_root: Optional[Path], stem: str) -> Optional[Path]:

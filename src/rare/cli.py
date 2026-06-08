@@ -152,12 +152,15 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         images_dir = Path(args.images_dir) if args.images_dir else None
         category_map = load_category_map(args.category_map) if args.category_map else None
         pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else None
+        emit_omnidocbench = args.emit_omnidocbench or args.run_omnidocbench
         agg = run_pipeline(
             dataset, layout, order, run_dir,
             limit=args.limit,
-            emit_omnidocbench=args.emit_omnidocbench,
+            emit_omnidocbench=emit_omnidocbench,
             category_map=category_map,
             pdfs_dir=pdfs_dir,
+            run_omnidocbench=args.run_omnidocbench,
+            omnidocbench_image=args.omnidocbench_image,
         )
 
     elif args.track == "vlm":
@@ -168,8 +171,15 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         vlm = vlm_cls(config=_read_config(args.config))
 
         from rare.evaluate.runner import run_vlm
+        from rare.evaluate.omnidocbench import load_category_map
         pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else None
-        agg = run_vlm(dataset, vlm, run_dir, pdfs_dir=pdfs_dir, limit=args.limit)
+        category_map = load_category_map(args.category_map) if args.category_map else None
+        agg = run_vlm(
+            dataset, vlm, run_dir, pdfs_dir=pdfs_dir, limit=args.limit,
+            run_omnidocbench=args.run_omnidocbench,
+            omnidocbench_image=args.omnidocbench_image,
+            category_map=category_map,
+        )
 
     else:
         print(f"error: unknown --track '{args.track}'.", file=sys.stderr)
@@ -311,6 +321,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--category-map",
         help="Optional JSON file of {source_category_name: omnidocbench_category_type} "
              "merged on top of the built-in default map.",
+    )
+    p_eval.add_argument(
+        "--run-omnidocbench",
+        dest="run_omnidocbench",
+        action="store_true",
+        help="After emitting OmniDocBench artifacts, run the pinned OmniDocBench "
+             "Docker container on them and fold the text_block / reading_order "
+             "Edit-distance into report.md. Requires Docker. On the pipeline track "
+             "this implies --emit-omnidocbench; on the VLM track it requires a "
+             "resolvable --pdfs-dir for real-text ground truth.",
+    )
+    p_eval.add_argument(
+        "--omnidocbench-image",
+        help="Override the OmniDocBench Docker image used by --run-omnidocbench "
+             "(default: the pinned repro image).",
     )
     p_eval.add_argument(
         "--list-models",

@@ -16,3 +16,18 @@ is vendored from PaddleX's paddlex/inference/pipelines/layout_parsing/
 The original per-file Apache-2.0 copyright headers are preserved; files
 whose import paths were rewritten to keep the package self-contained
 carry a "Modified from PaddlePaddle/PaddleX" comment below the header.
+
+opendatalab/OmniDocBench (https://github.com/opendatalab/OmniDocBench)
+Copyright (c) 2024 OpenDataLab and the OmniDocBench authors.
+Licensed under the Apache License, Version 2.0; see licenses/LICENSE-OMNIDOCBENCH.
+
+The specialized VLM document-parsing backends:
+    src/rare/models/vlm/docling.py    (from tools/model_infer/docling_img2md.py)
+    src/rare/models/vlm/dotsocr.py    (from tools/model_infer/DotsOCR_img2md.py)
+    src/rare/models/vlm/glmocr.py     (from tools/model_infer/GLMOCRs_img2md.py)
+    src/rare/models/vlm/mineru.py     (from tools/model_infer/MinerU2.5_img2md.py)
+    src/rare/models/vlm/paddleocr.py  (from tools/model_infer/PaddleOCR_img2md.py)
+are adapted from OmniDocBench's tools/model_infer/ inference scripts. Each
+carries an "Adapted from OmniDocBench" header. The OmniDocBench end-to-end
+Edit-distance evaluator is invoked (unmodified, in its published Docker image)
+by src/rare/evaluate/omnidocbench_docker.py.

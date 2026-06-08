@@ -70,6 +70,30 @@ Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumu
 
 Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_model/}`.
 
+#### OmniDocBench Edit distance (`--run-omnidocbench`)
+
+Both tracks can additionally run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s end-to-end evaluator and fold the `text_block` and `reading_order` **Edit distance** into `report.md`. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
+
+```bash
+# Pipeline track — implies --emit-omnidocbench. With --pdfs-dir, ground-truth
+# region text is filled from the PDF (real text Edit distance); without it,
+# stub tokens are used and only reading-order box placement is measured.
+rare evaluate --track pipeline --dataset glasbena_mladina \
+    --layout doclayout-yolo --order top-bottom \
+    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
+
+# VLM track — REQUIRES --pdfs-dir. The VLM emits real OCR text, so the ground
+# truth must also carry real text (extracted from the PDF); without a resolvable
+# PDF directory the container step is skipped with a warning.
+rare evaluate --track vlm --dataset glasbena_mladina \
+    --vlm dots-ocr \
+    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
+```
+
+Results land in `omnidocbench/results_<model>/` and surface as `odb_text_block_edit` / `odb_reading_order_edit` columns in `report.md`. The container scores `text_block` and `reading_order` only; the formula CDM metric is intentionally omitted (irrelevant for formula-free magazines and it needs the heavy in-container LaTeX stack). Lower Edit distance is better.
+
+> **Note on coverage:** ground truth covers the whole dataset while predictions cover only the samples you ran, so combining `--run-omnidocbench` with `--limit` leaves unmatched GT pages that score the maximum Edit distance of 1.0. Run the full set for headline numbers.
+
 ### `rare tools` — annotation utilities
 
 ```bash
@@ -342,11 +366,41 @@ python -m pip install "paddleocr[all]"
 
 Two approaches to evaluation are present:
 - manual (hand written functions for computation of mAP, normalized edit distance within the project)
-- using [OmniDocBench](/) - _TODO - add_.
+- using [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — run automatically as part of `rare evaluate` via `--run-omnidocbench` (see [the usage section](#omnidocbench-edit-distance---run-omnidocbench))
 
-# Results
+# OmniDocBench Evaluation Results
 
-_TODO_
+The following results were obtained by evaluating detections made by the following models on ground truths of
+manually annotated Glasbena Mladina magazines.
+
+Current 
+
+## Layout Analysis
+
+| Model          | Backbone | mAP/mAP50/mAP70 |
+|----------------|----------|-----------------|
+| DiT            | TODO     | TODO            |
+| DocLayout-YOLO | TODO     | TODO            |
+| LayoutLMv3     | TODO     | TODO            |
+| DocLayout-YOLO | TODO     | TODO            |
+
+## Reading Order
+
+| Model                     | Backbone | mAP/mAP50/mAP70 |
+|---------------------------|----------|-----------------|
+| PaddleX's Improved XY-Cut | TODO     | TODO            |
+
+
+## VLM
+
+| Model     | Backbone | Normalized edit distance |
+|-----------|----------|--------------------------|
+| Docling   | TODO     | TODO                     |
+| dots.ocr  | TODO     | TODO                     |
+| GLM-OCR   | TODO     | TODO                     |
+| PaddleOCR | TODO     | TODO                     |
+| MinerU    | TODO     | TODO                     |
+
 
 # Demo
 
@@ -359,11 +413,14 @@ Pipeline based track:
 ground bounding boxes).
 - Currently RaRe only supports inference; possible extension includes training of the available models.
 - Adding support for Paragraph2Graph, M2Doc
+- VLM track currently only supports output in the formats given by each of the model itself. Further improvement could
+see its integration into rare and outputting in an arbitrary format (such as JSON, HTML etc.)
 
 # Acknowledgements
 
 Thanks for the work of the authors of these projects:
 - [PaddleX](https://github.com/PaddlePaddle/PaddleX) — the improved XY-Cut reading-order backend is vendored from PaddleX (Apache-2.0); see `NOTICE` and `licenses/LICENSE-PADDLEX`.
+- [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — the end-to-end Edit-distance evaluator (run via `--run-omnidocbench`) and the specialized VLM `img2md` parsing backends are adapted from OmniDocBench (Apache-2.0); see `NOTICE` and `licenses/LICENSE-OMNIDOCBENCH`.
 - [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)
 
 # Citation

@@ -21,8 +21,6 @@ _REGISTRIES: dict[str, dict[str, type]] = {
     "order": {},
     "vlm": {},
 }
-
-# Maps backend name → module path that registers it. Loaded lazily.
 _DEFERRED: dict[str, dict[str, str]] = {
     "layout": {
         # Detectron2 family
@@ -51,6 +49,18 @@ _DEFERRED: dict[str, dict[str, str]] = {
         "paddlex-xy-cut":         "rare.models.order.xycut",
     },
     "vlm": {
+        # Specialized VLMs
+        "docling":              "rare.models.vlm.docling",
+        "dots-ocr":             "rare.models.vlm.dotsocr",
+        "glm-ocr":              "rare.models.vlm.glmocr",
+        "mineru":               "rare.models.vlm.mineru",
+        "paddleocr":            "rare.models.vlm.paddleocr",
+
+        "claude":               "rare.models.vlm.claude",
+        "deepseek":             "rare.models.vlm.depseek",
+        "gemini":               "rare.models.vlm.gemini",
+        "gpt":                  "rare.models.vlm.gpt",
+        "qwen":                 "rare.models.vlm.qwen",
     },
 }
 
