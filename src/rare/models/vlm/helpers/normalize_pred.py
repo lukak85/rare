@@ -125,7 +125,7 @@ def _pick_markdown(files: list[Path], prefer_stem: str | None) -> Path | None:
     return None
 
 
-def from_paddlex(input_path: Path) -> dict[str, Path]:
+def from_folders(input_path: Path) -> dict[str, Path]:
     """PaddleX bundle dir -> {stem: md_path}. Each immediate subdirectory is one
     page; its inner markdown becomes `<subdir_name>.md`."""
     pages: dict[str, Path] = {}
@@ -209,7 +209,7 @@ def main() -> int:
         if layout == "odb-json":
             text_pages = from_odb_json(args.input)
         elif layout == "paddlex":
-            file_pages = from_paddlex(args.input)
+            file_pages = from_folders(args.input)
         elif layout == "flat":
             file_pages = from_flat(args.input)
         else:  # pragma: no cover - argparse restricts choices
