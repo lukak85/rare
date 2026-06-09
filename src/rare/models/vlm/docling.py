@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import traceback
 
 from tqdm import tqdm
 
@@ -69,7 +70,7 @@ class DoclingBackend:
     def to_markdown(
         self,
         pdf_dir: str | Path,
-        imaege_dir: str | Path,
+        image_dir: str | Path,
         out_md_dir: str | Path,
         skip_existing: bool = False,
     ) -> str | Path:
@@ -86,21 +87,21 @@ class DoclingBackend:
 
             img_path_tmp = os.path.join(pdf_dir, img_name)
             try:
-                result = self.converter.convert(img_path_tmp)
+                result = self._get_converter().convert(img_path_tmp)
                 result_md = result.document.export_to_markdown(page_break_placeholder="<!-- PAGE -->")
-            except:
-                print(img_name)
+            except Exception:
+                print(traceback.format_exc())
                 continue
 
             with open(save_result_path, 'w', encoding='utf-8') as output_file:
                 output_file.write(result_md)
 
-            from helpers.normalize_pred import split_single_markdown
+            from .helpers.normalize_pred import split_single_markdown
 
             text_pages = split_single_markdown(Path(save_result_path), self.page_break_marker)
 
             for stem, content in sorted(text_pages.items()):
-                (out_md_dir / f"{stem}.md").write_text(content)
+                (Path(out_md_dir) / f"{stem}.md").write_text(content)
 
             # Remove the all-including markdown
             os.remove(save_result_path)

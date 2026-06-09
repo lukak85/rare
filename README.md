@@ -24,7 +24,7 @@ pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.or
 pip install -e ".[docling]" # + Docling dependencies
 ```
 
-For the pipeline track, also install LayoutParser fork:
+Furthermore install LayoutParser fork:
 
 ```bash
 pip install -e layout-parser
@@ -398,8 +398,8 @@ manually annotated Glasbena Mladina magazines.
 | Docling   | TODO                    | TODO                     |
 | dots.ocr  | TODO                    | TODO                     |
 | GLM-OCR   | TODO                    | TODO                     |
-| PaddleOCR | TODO                    | TODO                     |
 | MinerU    | MinerU2.5-Pro-2604-1.2B | 0.268333333              |
+| PaddleOCR | TODO                    | TODO                     |
 
 
 # Demo
