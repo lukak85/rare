@@ -102,8 +102,9 @@ class MinerUBackend:
         parts = [b["content"] for b in blocks if b.get("content")]
         return "\n\n".join(parts)
 
-    def images_to_markdown(
+    def to_markdown(
         self,
+        pdf_dir: str | Path,
         image_dir: str | Path,
         out_md_dir: str | Path,
         out_json: str | Path | None = None,

@@ -292,8 +292,9 @@ def run_vlm(
     #if run_omnidocbench and parsed_docs:
     if run_omnidocbench:
         out_md_dir = f"outputs/rare/omnidocbench/{model_name}"
-        parsed_docs = vlm.images_to_markdown(
+        parsed_docs = vlm.to_markdown(
             image_dir=images_dir,
+            pdf_dir=pdfs_dir,
             out_md_dir=out_md_dir,
         )
         aggregates.update(_run_vlm_omnidocbench(
