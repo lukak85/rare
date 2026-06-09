@@ -145,6 +145,7 @@ def _connections_to_order(
 def load_glasbena_mladina(
     root: str | Path = "datasets/glasbena_mladina",
     images_dir: str | Path | None = None,
+    pdfs_dir: str | Path | None = None,
     ground_markdown_dir: str | Path | None = None,
     annotations_file: str | Path | None = None,
 ) -> EvalDataset:
@@ -177,6 +178,7 @@ def load_glasbena_mladina(
     conn_by_filename = {Path(e["image"]).name: e for e in connections}
 
     img_root = Path(images_dir) if images_dir else root
+    pdf_root = Path(pdfs_dir) if pdfs_dir else root # TODO
     samples: list[EvalSample] = []
     for image_id, info in coco.imgs.items():
         file_name = info["file_name"]

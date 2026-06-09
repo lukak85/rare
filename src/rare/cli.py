@@ -130,6 +130,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     ds_loader_kwargs = {}
     if args.data_root:
         ds_loader_kwargs["root"]=args.data_root
+    if args.pdfs_dir:
+        ds_loader_kwargs["pdfs_dir"]=args.pdfs_dir
     if args.images_dir:
         ds_loader_kwargs["images_dir"]=args.images_dir
     dataset = ds_loader.load(args.dataset, **ds_loader_kwargs)
@@ -173,9 +175,10 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         from rare.evaluate.runner import run_vlm
         from rare.evaluate.omnidocbench import load_category_map
         pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else None
+        images_dir = Path(args.images_dir) if args.images_dir else None
         category_map = load_category_map(args.category_map) if args.category_map else None
         agg = run_vlm(
-            dataset, vlm, run_dir, pdfs_dir=pdfs_dir, limit=args.limit,
+            dataset, vlm, run_dir, images_dir=images_dir, pdfs_dir=pdfs_dir, limit=args.limit,
             run_omnidocbench=args.run_omnidocbench,
             omnidocbench_image=args.omnidocbench_image,
             category_map=category_map,

@@ -37,7 +37,7 @@ from rare.models.vlm._vlm_schema import VLMDocument, VLMPage, VLMRegion
 from rare.models.vlm.prompts import MINERU_LABEL_MAP
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
-_DEFAULT_MODEL_PATH = "opendatalab/MinerU2.5-2509-1.2B"
+_DEFAULT_MODEL_PATH = "opendatalab/MinerU2.5-Pro-2604-1.2B"
 
 
 @register("vlm", "mineru")

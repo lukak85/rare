@@ -24,7 +24,7 @@ pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.or
 pip install -e ".[docling]" # + Docling dependencies
 ```
 
-For the LayoutParser fork:
+For the pipeline track, also install LayoutParser fork:
 
 ```bash
 pip install -e layout-parser
@@ -368,12 +368,12 @@ Two approaches to evaluation are present:
 - manual (hand written functions for computation of mAP, normalized edit distance within the project)
 - using [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — run automatically as part of `rare evaluate` via `--run-omnidocbench` (see [the usage section](#omnidocbench-edit-distance---run-omnidocbench))
 
+Current results are temporary and subject to change with further testing.
+
 # OmniDocBench Evaluation Results
 
 The following results were obtained by evaluating detections made by the following models on ground truths of
-manually annotated Glasbena Mladina magazines.
-
-Current 
+manually annotated Glasbena Mladina magazines. 
 
 ## Layout Analysis
 
@@ -393,13 +393,13 @@ Current
 
 ## VLM
 
-| Model     | Backbone | Normalized edit distance |
-|-----------|----------|--------------------------|
-| Docling   | TODO     | TODO                     |
-| dots.ocr  | TODO     | TODO                     |
-| GLM-OCR   | TODO     | TODO                     |
-| PaddleOCR | TODO     | TODO                     |
-| MinerU    | TODO     | TODO                     |
+| Model     | Type                    | Normalized edit distance |
+|-----------|-------------------------|--------------------------|
+| Docling   | TODO                    | TODO                     |
+| dots.ocr  | TODO                    | TODO                     |
+| GLM-OCR   | TODO                    | TODO                     |
+| PaddleOCR | TODO                    | TODO                     |
+| MinerU    | MinerU2.5-Pro-2604-1.2B | 0.268333333              |
 
 
 # Demo

@@ -233,6 +233,7 @@ def run_vlm(
     vlm,
     run_dir: Path,
     pdfs_dir: Optional[Path] = None,
+    images_dir: Optional[Path] = None,
     limit: Optional[int] = None,
     run_omnidocbench: bool = False,
     omnidocbench_image: Optional[str] = None,
@@ -288,10 +289,17 @@ def run_vlm(
 
     aggregates = vlm_aggregate(per_doc)
 
-    if run_omnidocbench and parsed_docs:
+    #if run_omnidocbench and parsed_docs:
+    if run_omnidocbench:
+        out_md_dir = f"outputs/rare/omnidocbench/{model_name}"
+        parsed_docs = vlm.images_to_markdown(
+            image_dir=images_dir,
+            out_md_dir=out_md_dir,
+        )
         aggregates.update(_run_vlm_omnidocbench(
             dataset, run_dir, model_name, parsed_docs,
             pdfs_dir=pdfs_dir,
+            out_md_dir=out_md_dir,
             category_map=category_map,
             omnidocbench_image=omnidocbench_image,
             raw_markdown=raw_markdown,
@@ -315,6 +323,7 @@ def _run_vlm_omnidocbench(
     model_name: str,
     parsed_docs: list[tuple[str, object]],
     pdfs_dir: Optional[Path],
+    out_md_dir: Path,
     category_map: Optional[dict[str, str]],
     omnidocbench_image: Optional[str],
     raw_markdown: bool = False,
@@ -352,15 +361,17 @@ def _run_vlm_omnidocbench(
         return {}
 
     # One markdown file per page in OmniDocBench's expected flat layout.
+    """
     markdown_dir = odb_dir / f"markdown_pred_{model_name}"
     markdown_dir.mkdir(parents=True, exist_ok=True)
     for pdf_stem, doc in parsed_docs:
         for page_no, page_md in to_markdown_pages(doc, raw=raw_markdown).items():
             (markdown_dir / f"{pdf_stem}_{page_no}.md").write_text(page_md)
+    """
 
     return run_eval(
         gt_path=gt_path,
-        pred_md_dir=markdown_dir,
+        pred_md_dir=Path(out_md_dir),
         result_dir=odb_dir / f"results_{model_name}",
         image=omnidocbench_image or DEFAULT_IMAGE,
     )
