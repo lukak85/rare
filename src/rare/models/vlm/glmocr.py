@@ -251,10 +251,7 @@ class GLMOCRBackend:
         return out_md_dir
         """
 
-        IMAGE_FOLDER = "/storage/lukakuzman/datasets/glasbena_mladina/images"  # 请替换为你的图片文件夹路径
-        MARKDOWN_FOLDER = "outputs/omnidocbench/glmocr"
-
-        output_folder = process_images_to_markdown(
+        output_folder = self.process_images_to_markdown(
             image_folder_path=image_dir,
             markdown_folder_path=out_md_dir,
             base_url="http://localhost:8080/v1",  # match your `vllm serve --port`
