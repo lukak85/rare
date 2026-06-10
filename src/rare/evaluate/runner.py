@@ -296,6 +296,7 @@ def run_vlm(
             image_dir=images_dir,
             pdf_dir=pdfs_dir,
             out_md_dir=out_md_dir,
+            skip_existing=True
         )
         aggregates.update(_run_vlm_omnidocbench(
             dataset, run_dir, model_name, parsed_docs,

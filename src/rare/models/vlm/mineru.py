@@ -108,6 +108,7 @@ class MinerUBackend:
         image_dir: str | Path,
         out_md_dir: str | Path,
         out_json: str | Path | None = None,
+        skip_existing: bool = False,
     ) -> dict[str, list[dict]]:
         """Extract every image under `image_dir` and write `<stem>.md` files into
         `out_md_dir`. When `out_json` is given, also dump the raw per-image block

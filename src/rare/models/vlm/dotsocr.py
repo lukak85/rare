@@ -27,10 +27,11 @@ Requires a running dots.ocr vLLM server (set ip/port/model_name via config)::
 
 from __future__ import annotations
 
-import os
 import json
-from pathlib import Path
 from multiprocessing.pool import ThreadPool
+import os
+from pathlib import Path
+import shutil
 
 from tqdm import tqdm
 
@@ -65,7 +66,7 @@ class DotsOCRBackend:
         self.protocol = cfg.get("protocol", "http")
         self.ip = cfg.get("ip", "localhost")
         self.port = int(cfg.get("port", 8000))
-        self.model_name = cfg.get("model_name", "dots.ocr/")
+        self.model_name = cfg.get("model_name", "model")
         self.temperature = float(cfg.get("temperature", 0.1))
         self.top_p = float(cfg.get("top_p", 1.0))
         self.max_completion_tokens = int(cfg.get("max_completion_tokens", 16384))
@@ -74,6 +75,7 @@ class DotsOCRBackend:
         self.min_pixels = cfg.get("min_pixels")
         self.max_pixels = cfg.get("max_pixels")
         self.num_thread = int(cfg.get("num_thread", 16))
+        self.use_hf=bool(cfg.get("use_hf", False))
         # Drop page header/footer from the Markdown (layoutjson2md's no_page_hf).
         self.no_page_hf = bool(cfg.get("no_page_hf", False))
 
@@ -274,7 +276,7 @@ class DotsOCRBackend:
 
         return results
 
-    def _collect_files(input_dir, recursive=False):
+    def _collect_files(self, input_dir, recursive=False):
         """收集目录下所有支持的 PDF/图片文件。"""
         input_path = Path(input_dir)
         if not input_path.is_dir():
@@ -285,6 +287,75 @@ class DotsOCRBackend:
         else:
             files = [p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() in supported]
         return sorted(files)
+
+    def _load_hf_model(self):
+        import torch
+        from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer
+        from qwen_vl_utils import process_vision_info
+
+        model_path = "./weights/DotsOCR"
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        )
+        self.processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
+        self.process_vision_info = process_vision_info
+
+    def _inference_with_hf(self, image, prompt):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": image
+                    },
+                    {"type": "text", "text": prompt}
+                ]
+            }
+        ]
+
+        text = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        image_inputs, video_inputs = self.process_vision_info(messages)
+        inputs = self.processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+
+        inputs = inputs.to("cuda")
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=24000)
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        response = self.processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+        return response
+
+    def _inference_with_vllm(self, image, prompt):
+        response = inference_with_vllm(
+            image,
+            prompt,
+            model_name=self.model_name,
+            protocol=self.protocol,
+            ip=self.ip,
+            port=self.port,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            max_completion_tokens=self.max_completion_tokens,
+        )
+        return response
 
     # --- faithful reference port -------------------------------------------
 
@@ -318,36 +389,32 @@ class DotsOCRBackend:
             for f in files:
                 stem = f.stem
                 save_dir = os.path.join(out_md_dir, stem)
-                if skip_existing and os.path.isdir(save_dir) and os.path.isfile(
-                        os.path.join(out_md_dir, stem + ".jsonl")):
+                if skip_existing and (os.path.isfile(os.path.join(out_md_dir, stem + ".md") or (os.path.isdir(save_dir) and os.path.isfile(os.path.join(out_md_dir, stem + ".jsonl"))))):
                     continue
                 to_process.append(f)
 
             skipped = len(files) - len(to_process)
             if skipped:
                 print(f"跳过 {skipped} 个(输出已存在)，待处理 {len(to_process)} 个")
-            if not to_process:
-                print("全部已有输出，无需处理")
-                return
-
-            for fp in tqdm(to_process, desc="Processing files"):
-                try:
-                    self.parse_file(
-                        str(fp),
-                        output_dir=out_md_dir,
-                        prompt_mode="prompt_layout_all_en",
-                        bbox=('x1', 'y1', 'x2', 'y2'),
-                        fitz_preprocess=True,
-                    )
-                except Exception as e:
-                    tqdm.write(f"失败 {fp.name}: {e}")
+            if to_process:
+                for fp in tqdm(to_process, desc="Processing files"):
+                    try:
+                        self.parse_file(
+                            str(fp),
+                            output_dir=out_md_dir,
+                            prompt_mode="prompt_layout_all_en",
+                            bbox=('x1', 'y1', 'x2', 'y2'),
+                            fitz_preprocess=True,
+                        )
+                    except Exception as e:
+                        tqdm.write(f"失败 {fp.name}: {e}")
 
         from .helpers.normalize_pred import from_folders
 
-        text_pages = from_folders(out_md_dir)
+        file_pages = from_folders(Path(out_md_dir))
 
-        for stem, content in sorted(text_pages.items()):
-            (Path(out_md_dir) / f"{stem}.md").write_text(content)
+        for stem, src in sorted(file_pages.items()):
+            shutil.copyfile(src, Path(out_md_dir) / f"{stem}.md")
 
         # Remove all folders
         for item in Path(out_md_dir).iterdir():
@@ -356,6 +423,8 @@ class DotsOCRBackend:
                     if subitem.is_file():
                         subitem.unlink()
                 item.rmdir()
+            if item.is_file() and item.suffix == ".jsonl":
+                os.remove(os.path.join(out_md_dir, item.name))
 
         return out_md_dir
 
