@@ -295,7 +295,7 @@ conda install nvidia::cuda-nvcc==12.8.93
 
 Then run a vLLM server:
 ```bash
-vllm serve zai-org/GLM-OCR --allowed-local-media-path --port 8080
+vllm serve zai-org/GLM-OCR --allowed-local-media-path / --port 8080
 ```
 
 <details>
