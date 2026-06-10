@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from pathlib import Path
+import shutil
 
 from paddleocr import PPStructureV3
 from tqdm import tqdm
@@ -90,6 +92,78 @@ class PaddleOCRBackend:
         results = self._get_pipeline().predict(str(source), **self.predict_flags)
         return [self._result_to_markdown(res) for res in results]
 
+    def process_folder(self, folder_path, output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        pipeline  = PPStructureV3()
+
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
+        image_files = [f for f in os.listdir(folder_path)
+                       if os.path.splitext(f)[1].lower() in image_extensions]
+
+        processing_stats = []
+
+        for img_file in tqdm(image_files, desc="Processing images"):
+            img_path = os.path.join(folder_path, img_file)
+
+            start_time = time.time()
+
+            try:
+                result = pipeline.predict(img_path,
+                                          use_doc_orientation_classify=False,
+                                          use_doc_unwarping=False,
+                                          use_textline_orientation = False,
+                                          )
+
+                end_time = time.time()
+                processing_time = end_time - start_time
+
+                base_name = os.path.splitext(img_file)[0]
+                oupt_file = os.path.join(output_dir, base_name)
+                for res in result:
+                    res.save_to_json(oupt_file)
+                    res.save_to_markdown(oupt_file, pretty=False)
+
+                print(f"Result save to {oupt_file}")
+
+                processing_stats.append({
+                    "image": img_file,
+                    "processing_time": processing_time,
+                    "status": "success"
+                })
+
+            except Exception as e:
+                end_time = time.time()
+                processing_time = end_time - start_time
+                processing_stats.append({
+                    "image": img_file,
+                    "processing_time": processing_time,
+                    "status": f"failed: {str(e)}"
+                })
+
+
+        print("\nProcessing Statistics:")
+        print("=" * 50)
+        for stat in processing_stats:
+            print(f"Image: {stat['image']}")
+            print(f"Status: {stat['status']}")
+            print(f"Processing Time: {stat['processing_time']:.2f} seconds")
+            print("-" * 50)
+
+
+        total_time = sum(stat['processing_time'] for stat in processing_stats)
+        success_count = sum(1 for stat in processing_stats if stat['status'] == 'success')
+        failed_count = len(processing_stats) - success_count
+
+        print("\nSummary:")
+        print("=" * 50)
+        print(f"Total Images Processed: {len(processing_stats)}")
+        print(f"Successfully Processed: {success_count}")
+        print(f"Failed to Process: {failed_count}")
+        print(f"Total Processing Time: {total_time:.2f} seconds")
+        print(f"Average Processing Time: {total_time/len(processing_stats):.2f} seconds per image")
+
+        return processing_stats
+
     # --- faithful reference port -------------------------------------------
 
     def to_markdown(
@@ -102,21 +176,20 @@ class PaddleOCRBackend:
         """Convert every page image under `image_dir` and write `<stem>.md` into
         `out_md_dir` (one per image), matching `PaddleOCR_img2md.py`. `pdf_dir` is
         unused (PaddleOCR scores per page image) but kept for signature parity."""
-        os.makedirs(out_md_dir, exist_ok=True)
-        paths = sorted(
-            p for p in Path(image_dir).iterdir()
-            if p.is_file() and p.suffix.lower() in _IMAGE_SUFFIXES
-        )
-        todo = [
-            p for p in paths
-            if not (skip_existing and (Path(out_md_dir) / f"{p.stem}.md").exists())
-        ]
-        print(f"found {len(paths)} images; processing {len(todo)}.")
-        for path in tqdm(todo, desc="paddleocr"):
-            mds = self._predict_markdowns(path)
-            (Path(out_md_dir) / f"{path.stem}.md").write_text(
-                "\n\n".join(m for m in mds if m), encoding="utf-8"
-            )
+        stats = self.process_folder(image_dir, out_md_dir)
+
+        from .helpers.normalize_pred import from_folders
+
+        file_pages = from_folders(Path(out_md_dir))
+
+        for stem, src in sorted(file_pages.items()):
+            shutil.copyfile(src, Path(out_md_dir) / f"{stem}.md")
+
+        # Remove all folders
+        for item in Path(out_md_dir).iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+
         return out_md_dir
 
     # --- evaluate/runner.py::run_vlm contract ------------------------------
