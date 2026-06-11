@@ -30,10 +30,13 @@ import warnings
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
+from typing import List
+
 # A `text_source` callable returns the `text` for one layout_det:
 #   (image_path, poly, img_w, img_h) -> str
 # See `rare.evaluate.pdf_text.PdfTextSource` for the PDF-backed implementation.
-TextSource = Callable[[str, list[float], int, int], str]
+# TextSource = Callable[[str, list[float], int, int], str] TODO: does not work with Python<3.9
+TextSource = Callable[[str, List[float], int, int], str]
 
 
 # ---------------------------------------------------------------------------

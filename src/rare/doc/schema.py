@@ -9,9 +9,14 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Iterable, Literal, Optional, Union
+from typing import Iterable, Optional, Union
+try:
+    from typing import Annotated, Literal  # Python 3.9+
+except ImportError:
+    from typing_extensions import Annotated, Literal  # Python 3.7 / 3.8
 
 from pydantic import BaseModel, Field
+from typing import List, Dict
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +311,8 @@ class TableCell(BaseModel):
 class TableData(BaseModel):
     num_rows: int
     num_cols: int
-    cells: list[TableCell]
+    # cells: list[TableCell]
+    cells: List[TableCell]
 
     def get_cell(self, row: int, col: int) -> Optional[TableCell]:
         for cell in self.cells:
@@ -329,7 +335,8 @@ class ListItem(BaseModel):
     """A single item within an ordered or unordered list. Not a DocItem (no provenance)."""
     index: int
     text: str
-    sub_items: list[ListItem] = Field(default_factory=list)
+    # sub_items: list[ListItem] = Field(default_factory=list)
+    sub_items: List[ListItem] = Field(default_factory=list)
 
 
 ListItem.model_rebuild()  # resolve forward ref
@@ -337,13 +344,15 @@ ListItem.model_rebuild()  # resolve forward ref
 
 class OrderedListItem(DocItem):
     category: Literal[RegionCategory.ORDERED_LIST] = RegionCategory.ORDERED_LIST
-    items: list[ListItem] = Field(default_factory=list)
+    # items: list[ListItem] = Field(default_factory=list)
+    items: List[ListItem] = Field(default_factory=list)
     raw_text: str = ""
 
 
 class UnorderedListItem(DocItem):
     category: Literal[RegionCategory.UNORDERED_LIST] = RegionCategory.UNORDERED_LIST
-    items: list[ListItem] = Field(default_factory=list)
+    # items: list[ListItem] = Field(default_factory=list)
+    items: List[ListItem] = Field(default_factory=list)
     raw_text: str = ""
 
 
@@ -355,7 +364,8 @@ class Article(BaseModel):
     """A logical grouping of DocItems belonging to the same editorial piece."""
     article_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = ""
-    item_ids: list[str] = Field(default_factory=list)
+    # item_ids: list[str] = Field(default_factory=list)
+    item_ids: List[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -393,10 +403,14 @@ class GlasanaDocument(BaseModel):
     """
     doc_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_pdf: str = ""
-    items: dict[str, AnyDocItem] = Field(default_factory=dict)
-    body_order: list[str] = Field(default_factory=list)
-    articles: dict[str, Article] = Field(default_factory=dict)
-    pages: dict[int, PageInfo] = Field(default_factory=dict)
+    # items: dict[str, AnyDocItem] = Field(default_factory=dict)
+    items: Dict[str, AnyDocItem] = Field(default_factory=dict)
+    # body_order: list[str] = Field(default_factory=list)
+    body_order: List[str] = Field(default_factory=list)
+    # articles: dict[str, Article] = Field(default_factory=dict)
+    articles: Dict[str, Article] = Field(default_factory=dict)
+    # pages: dict[int, PageInfo] = Field(default_factory=dict)
+    pages: Dict[int, PageInfo] = Field(default_factory=dict)
 
     def get_item(self, item_id: str) -> Optional[AnyDocItem]:
         return self.items.get(item_id)

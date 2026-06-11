@@ -112,7 +112,7 @@ def run_pipeline(
 
     for sample in samples:
         image = _open_image(sample.image_path)
-        predicted = layout.detect(image)
+        predicted = layout.detect(sample.image_path)
         predicted_order = order.order(
             predicted,
             image=image,

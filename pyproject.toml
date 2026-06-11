@@ -7,7 +7,7 @@ name = "rare"
 version = "0.1.0"
 description = "Razčlenjevalnik Revij."
 readme = "README.md"
-requires-python = ">=3.10"
+# requires-python = ">=3.10"
 license = { file = "LICENSE" }
 dependencies = [
     "pycocotools",
@@ -24,6 +24,9 @@ dependencies = [
 doclayout-yolo = ["doclayout-yolo", "huggingface-hub", "torch", "torchmetrics"]
 pp-doclayoutv3 = ["paddleocr[all]"]
 pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]
+layoutlmv3 = ["datasets==1.15.1", "transformers==4.12.5", "seqeval==1.2.2", "deepspeed==0.5.7", "tensorboard==2.7.0",
+    "seqeval==1.2.2", "sentencepiece", "timm==0.4.12", "Pillow", "einops", "textdistance", "shapely", "layoutlmft",
+    "torchmetrics"]
 
 claude   = ["anthropic"]
 openai   = ["openai"]

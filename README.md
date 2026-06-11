@@ -19,7 +19,8 @@ pip install -e .                   # core package + 'rare' command
 
 # Model specific dependencies
 pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
-pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies 
+pip install -e ".[layoutlmv3]" # + LayoutLMv3 dependencies 
+pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies
 
 pip install -e ".[docling]" # + Docling dependencies
 ```
@@ -118,7 +119,7 @@ The supported models (and therefore given Python version recommendations) were t
 | **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Vision transformers | _TODO_                     |
 | **[DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                         | `doclayout-yolo` | Object detection    | 3.10                       |
 | **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-based           | _TODO_                     |
-| **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal          | _TODO_                     |
+| **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal          | 3.7                        |
 | **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | _TODO_                     |
 | **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Vision transformers | 3.12                       |
 | **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | _TODO_                     |
@@ -195,11 +196,38 @@ _TODO (VLM track)_
 
 ## Additional model-specific setup
 
-### LayoutLMv3 / DiT
+### DiT
 
-Detectron2 backbones. See the following links:
-- [LayoutLMv3 install notes](https://github.com/microsoft/unilm/tree/master/layoutlmv3#installation)
+Detectron2 backbone. See the following links:
 - [DiT install notes](https://github.com/microsoft/unilm/tree/master/dit#setup)
+
+### LayoutLMv3
+
+The installation rougly follows that of [LayoutLMv3 install notes](https://github.com/microsoft/unilm/tree/master/layoutlmv3#installation).
+Install Pytorch via:
+```bash
+pip install torch==1.10.0+cu111 torchvision==0.11.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+Due to Detectron2 backbone, install it via:
+```bash
+python -m pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.10/index.html
+```
+
+Check Pytorch version. If not 1.10.0+cu111, run the Pytorch installation command again.
+
+Then clone the [unilm repository](https://github.com/microsoft/unilm/tree/master):
+```bash
+git clone https://github.com/microsoft/unilm.git
+```
+
+And inside [/unilm/layoutlmv3](/unilm/layoutlmv3) run:
+```bash
+pip install -e .
+```
+
+Inside [configs/layoutlmv3/yaml](./configs/layoutlmv3/yaml) place [cascade_layoutlmv3.yaml](https://github.com/microsoft/unilm/blob/c45389eda88e14c57de2c07472e3f49383a6dab0/layoutlmv3/examples/object_detection/cascade_layoutlmv3.yaml),
+and change WEIGHTS path to the path with weights on your system.
 
 ### PP-DocLayoutV3
 
@@ -405,6 +433,22 @@ manually annotated Glasbena Mladina magazines.
 # Demo
 
 _TODO_
+
+# TODO
+
+Top priority:
+- [X] Add specialized VLM support:
+  - [ ] Marker
+- [ ] Add general VLM support, among others:
+  - [ ] GPT 5.5
+  - [ ] Gemini Pro 3.1
+  - [ ] Anthropic Claude Fable 5 / Opus 4.8
+  - [ ] DeepSeek V3
+- [ ] Add OmniDocBench evaluation support for pipeline track
+- [ ] Evaluate all pipeline and VLM models
+
+Lower priority:
+- [ ] Add support for Paragraph2Graph, M2Doc
 
 # Limitations and Further Work
 

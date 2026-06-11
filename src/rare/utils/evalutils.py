@@ -6,6 +6,8 @@ import sys
 import unicodedata
 from collections import Counter
 
+from typing import List
+
 # All Unicode punctuation characters plus standard ASCII punctuation
 PUNCT = {
     chr(i)
@@ -93,7 +95,7 @@ def mean_average_precision(predictions, ground_truths):
     return metric.compute()
 
 
-def kendall_tau(a: list[int], b: list[int]) -> float:
+def kendall_tau(a: List[int], b: List[int]) -> float: # TODO: a: list[int], b: list[int], but doesn't work with Python<3.9
     """Kendall's tau-b on two rank sequences of equal length. O(n^2)."""
     n = len(a)
     if n < 2:
