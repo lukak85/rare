@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 # Install with: pip install -e ".[claude]" or pip install -e ".[vlm-all]"
+dit = ["timm==0.5.4", "Pillow", "blobfile", "mypy", "numpy", "pytest", "requests",
+    "einops", "tensorboardX", "deepspeed==0.4.0", "scipy", "opencv-python", "shapely"]
 doclayout-yolo = ["doclayout-yolo", "huggingface-hub", "torch", "torchmetrics"]
 pp-doclayoutv3 = ["paddleocr[all]"]
 pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]

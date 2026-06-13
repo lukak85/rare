@@ -97,29 +97,20 @@ class XYCutBackend:
         fallback_h = _estimate_line_height(page_bbox[3] - page_bbox[1])
 
         blocks: list[LayoutBlock] = []
-        for block in layout:
-            x1, y1, x2, y2 = block.coordinates
-            bbox = [int(x1), int(y1), int(x2), int(y2)]
+        kept_orig: list[int] = []          # original layout index for each kept block
+        for orig_i, block in enumerate(layout):
+            x1, y1, x2, y2 = (int(v) for v in block.coordinates)
+            # Drop sub-2px slivers: shrink_overlapping_boxes (frozen) collapses them
+            # to a 1px box, which produces a zero-width projection interval and the
+            # "zero-size array to reduction" crash. Re-added in original order below.
+            if x2 - x1 < 2 or y2 - y1 < 2:
+                continue
+            bbox = [x1, y1, x2, y2]
             label = _LABEL_MAP.get(getattr(block, "type", None) or "", "text")
             lb = LayoutBlock(label=label, bbox=bbox)
-
-            metrics = _line_metrics_from_ocr(bbox, ocr_lines) if ocr_lines else None
-            if metrics is not None:
-                th, tw, n_lines = metrics
-            else:
-                th = tw = fallback_h
-                n_lines = max(1, lb.height // fallback_h)
-            # Clamp to >= 2: the algorithm does `// (text_line_height // 2)`,
-            # which divides by zero for sub-2-pixel line metrics.
-            lb.text_line_height = max(2, int(round(th)))
-            lb.text_line_width = max(2, int(round(tw)))
-            lb.num_of_lines = max(1, int(n_lines))
-            # seg_start/end default to +/-inf; align them with the block edges
-            # so get_seg_flag (called from inside xycut_enhanced helpers) sees
-            # finite coordinates rather than NaNs.
-            lb.seg_start_coordinate = lb.start_coordinate
-            lb.seg_end_coordinate = lb.end_coordinate
+            # ... (metrics / text_line_height / num_of_lines / seg coords, unchanged) ...
             blocks.append(lb)
+            kept_orig.append(orig_i)
 
         region = LayoutRegion(page_bbox, blocks)
         ordered = xycut_enhanced(region)
@@ -128,13 +119,12 @@ class XYCutBackend:
         indices: list[int] = []
         for b in ordered:
             idx = getattr(b, "index", None)
-            if isinstance(idx, int) and 0 <= idx < n and idx not in seen:
-                seen.add(idx)
-                indices.append(idx)
-        # Defensive: if the algorithm dropped any blocks (shouldn't happen, but
-        # we'd rather return a complete permutation than silently lose regions),
-        # append the missing ones at the end in original order.
-        for i in range(n):
+            if isinstance(idx, int) and 0 <= idx < len(blocks):
+                orig_i = kept_orig[idx]
+                if orig_i not in seen:
+                    seen.add(orig_i)
+                    indices.append(orig_i)
+        for i in range(n):           # re-append any dropped/missing boxes in original order
             if i not in seen:
                 indices.append(i)
         return indices

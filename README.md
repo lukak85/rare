@@ -18,6 +18,7 @@ dependencies are needed):
 pip install -e .                   # core package + 'rare' command
 
 # Model specific dependencies
+pip install -e ".[dit]" # + DiT dependencies
 pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
 pip install -e ".[layoutlmv3]" # + LayoutLMv3 dependencies 
 pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies
@@ -116,11 +117,11 @@ The supported models (and therefore given Python version recommendations) were t
 
 | Model                                                                                                       | CLI name         | Type                | Recommended Python version |
 |-------------------------------------------------------------------------------------------------------------|------------------|---------------------|----------------------------|
-| **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Vision transformers | _TODO_                     |
+| **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Vision transformers | 3.8                        |
 | **[DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                         | `doclayout-yolo` | Object detection    | 3.10                       |
-| **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-based           | _TODO_                     |
+| **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-based           | 3.12                       |
 | **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal          | 3.7                        |
-| **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | _TODO_                     |
+| **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | 3.12                       |
 | **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Vision transformers | 3.12                       |
 | **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | _TODO_                     |
 | **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal          | _TODO_                     |
@@ -198,8 +199,16 @@ _TODO (VLM track)_
 
 ### DiT
 
-Detectron2 backbone. See the following links:
-- [DiT install notes](https://github.com/microsoft/unilm/tree/master/dit#setup)
+The installation roughly follows that of [DiT install notes](https://github.com/microsoft/unilm/tree/master/dit#setup).
+Install Pytorch via:
+```bash
+pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+Due to Detectron2 backbone, install it via:
+```bash
+python -m pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.9/index.html
+```
 
 ### LayoutLMv3
 
