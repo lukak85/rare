@@ -24,11 +24,14 @@ dependencies = [
 dit = ["timm==0.5.4", "Pillow", "blobfile", "mypy", "numpy", "pytest", "requests",
     "einops", "tensorboardX", "deepspeed==0.4.0", "scipy", "opencv-python", "shapely"]
 doclayout-yolo = ["doclayout-yolo", "huggingface-hub", "torch", "torchmetrics"]
-pp-doclayoutv3 = ["paddleocr[all]"]
-pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]
+faster-rcnn = ["torch", "torchvision", "effdet"]
 layoutlmv3 = ["datasets==1.15.1", "transformers==4.12.5", "seqeval==1.2.2", "deepspeed==0.5.7", "tensorboard==2.7.0",
     "seqeval==1.2.2", "sentencepiece", "timm==0.4.12", "Pillow", "einops", "textdistance", "shapely", "layoutlmft",
     "torchmetrics"]
+mask-rcnn = ["torch", "torchvision", "effdet"]
+pp-doclayoutv3 = ["paddleocr[all]"]
+pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]
+rf-detr = ["rfdetr-doclayout", "requests", "torchmetrics"]
 
 claude   = ["anthropic"]
 openai   = ["openai"]

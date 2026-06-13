@@ -20,7 +20,9 @@ pip install -e .                   # core package + 'rare' command
 # Model specific dependencies
 pip install -e ".[dit]" # + DiT dependencies
 pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
+pip install -e ".[faster-rcnn]" # + Faster R-CNN dependencies
 pip install -e ".[layoutlmv3]" # + LayoutLMv3 dependencies 
+pip install -e ".[mask-rcnn]" # + Mask R-CNN dependencies
 pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies
 
 pip install -e ".[docling]" # + Docling dependencies
@@ -123,7 +125,7 @@ The supported models (and therefore given Python version recommendations) were t
 | **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal          | 3.7                        |
 | **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | 3.12                       |
 | **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Vision transformers | 3.12                       |
-| **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | _TODO_                     |
+| **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | 3.14                       |
 | **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal          | _TODO_                     |
 
 \* Included in LayoutParser with detectron2
@@ -251,6 +253,14 @@ If NVCC is not is not available, it must be installed. For example, given CUDA v
 
 ```bash
 conda install nvidia::cuda-nvcc==12.8.93
+```
+
+### RF-DETR
+
+Given CUDA version 12.8, install torch via:
+
+```bash
+pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
 ### VGT
