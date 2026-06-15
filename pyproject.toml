@@ -34,8 +34,8 @@ pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]
 rf-detr = ["rfdetr-doclayout", "requests", "torchmetrics"]
 
 claude   = ["anthropic"]
-openai   = ["openai"]
-vlm-all  = ["anthropic", "openai"]
+gemini = ["google-genai"]
+gpt = ["aiohttp"]
 # MinerU is installed separately: pip install -U "mineru[core]"
 
 [project.scripts]

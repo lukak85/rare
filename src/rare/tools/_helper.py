@@ -1,6 +1,9 @@
 import argparse
+import hashlib
 import json
 import os
+import re
+import shutil
 
 import cv2
 from pycocotools.coco import COCO
@@ -276,6 +279,145 @@ def load_coco_bboxes(coco_path: str, image_id: int) -> list[dict]:
     return bboxes
 
 # ==============================================================================
+# PDF collection
+# ==============================================================================
+
+# A PAWLS paper folder is named after the SHA-256 hex digest of the PDF it holds.
+HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def sha256_of(path, chunk_size=1 << 20):
+    """SHA-256 hex digest of a file's bytes (streamed, so large PDFs are fine)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def collect_pdfs(papers_root, output_dir, original_names=False):
+    """Gather every per-folder PDF under a PAWLS papers root into one directory.
+
+    PAWLS stores each ingested document as `<sha256>/<sha256>.pdf`, where the
+    folder/file name is the SHA-256 of the original PDF's bytes. The same root
+    often still holds the original, human-named PDFs (e.g. `44310785_..._07.pdf`)
+    that were ingested. We hash those originals to recover the
+    hash -> original-name mapping, copy out each folder's PDF, and write a
+    `mapping.json` recording the correspondence.
+
+    Args:
+        papers_root: Folder containing the `<hash>/` subfolders (and, ideally,
+            the original named PDFs at its top level).
+        output_dir: Destination directory for the collected PDFs.
+        original_names: If True, name each copy after its recovered original
+            filename (falling back to `<hash>.pdf` when no original is found).
+
+    Returns:
+        The list of mapping records written to `mapping.json`.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Recover hash -> original filename by hashing the named PDFs at the root.
+    hash_to_original = {}
+    for entry in sorted(os.listdir(papers_root)):
+        full = os.path.join(papers_root, entry)
+        if os.path.isfile(full) and entry.lower().endswith(".pdf"):
+            hash_to_original[sha256_of(full)] = entry
+
+    mapping = []
+    used_names = set()
+    copied = skipped = 0
+    for entry in sorted(os.listdir(papers_root)):
+        if not HASH_RE.match(entry):
+            continue
+        src = os.path.join(papers_root, entry, f"{entry}.pdf")
+        if not os.path.isfile(src):
+            print(f"  ! no PDF in {entry}/, skipping")
+            skipped += 1
+            continue
+
+        original = hash_to_original.get(entry)
+        dst_name = original if (original_names and original) else f"{entry}.pdf"
+
+        # Guard against the rare case of two originals colliding on one name.
+        base, ext = os.path.splitext(dst_name)
+        candidate = dst_name
+        n = 1
+        while candidate in used_names:
+            candidate = f"{base}_{n}{ext}"
+            n += 1
+        dst_name = candidate
+        used_names.add(dst_name)
+
+        shutil.copy2(src, os.path.join(output_dir, dst_name))
+        mapping.append({"hash": entry, "original_name": original, "copied_as": dst_name})
+        copied += 1
+
+    mapping_path = os.path.join(output_dir, "mapping.json")
+    with open(mapping_path, "w") as f:
+        json.dump(mapping, f, indent=2)
+
+    matched = sum(1 for m in mapping if m["original_name"])
+    print(f"\nCollected {copied} PDF(s) into {output_dir} ({skipped} skipped)")
+    print(f"Recovered original names for {matched}/{copied} via SHA-256 match")
+    print(f"Wrote mapping -> {mapping_path}\n")
+    return mapping
+
+
+def load_mapping(source):
+    """Return a list of {"hash", "original_name"} records for reverse lookup.
+
+    `source` may be either a `mapping.json` written by collect_pdfs, or a papers
+    root directory (in which case the hash -> original-name correspondence is
+    rebuilt by hashing the named PDFs at its top level).
+    """
+    if os.path.isfile(source) and source.lower().endswith(".json"):
+        with open(source) as f:
+            return json.load(f)
+
+    if os.path.isdir(source):
+        records = []
+        seen = set()
+        # Map original names by hashing the top-level named PDFs.
+        hash_to_original = {}
+        for entry in sorted(os.listdir(source)):
+            full = os.path.join(source, entry)
+            if os.path.isfile(full) and entry.lower().endswith(".pdf"):
+                hash_to_original[sha256_of(full)] = entry
+        for entry in sorted(os.listdir(source)):
+            if HASH_RE.match(entry):
+                records.append({"hash": entry, "original_name": hash_to_original.get(entry)})
+                seen.add(entry)
+        # Include originals whose hash folder is absent, so lookups still resolve.
+        for h, name in hash_to_original.items():
+            if h not in seen:
+                records.append({"hash": h, "original_name": name})
+        return records
+
+    raise ValueError(f"Source is neither a mapping.json nor a directory: {source}")
+
+
+def lookup_pdf(query, source):
+    """Resolve a hash to its original name, or an original name to its hash.
+
+    Matches in either direction: an exact 64-hex `query` resolves hash ->
+    original name; otherwise `query` is matched (exact, then substring) against
+    original filenames to resolve name -> hash.
+
+    Returns the list of matching records (possibly empty).
+    """
+    records = load_mapping(source)
+
+    if HASH_RE.match(query):
+        return [r for r in records if r["hash"] == query]
+
+    exact = [r for r in records if r.get("original_name") == query]
+    if exact:
+        return exact
+    return [r for r in records if r.get("original_name") and query in r["original_name"]]
+
+
+# ==============================================================================
 # Entry point
 # ==============================================================================
 
@@ -305,7 +447,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "-m", "--mode",
         help="Action: join-annotations, prepare-annotations, order-images, "
-             "remove-scores, review-annotations, count-annotations, text-extraction or visualize (default)",
+             "remove-scores, review-annotations, count-annotations, text-extraction, "
+             "collect-pdfs, lookup-pdf or visualize (default)",
         type=str,
         default="visualize",
     )
@@ -333,6 +476,18 @@ def main(argv: list[str] | None = None) -> int:
         "-t", "--visualize-text",
         help="Whether to visualize extracted text next to the bounding boxes",
         action="store_true",
+    )
+    parser.add_argument(
+        "--original-names",
+        help="For collect-pdfs: name collected PDFs after their recovered "
+             "original filename instead of the SHA-256 hash",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--query",
+        help="For lookup-pdf: a SHA-256 hash (resolves to original name) or an "
+             "original filename / substring (resolves to hash)",
+        type=str,
     )
 
     args = parser.parse_args(argv)
@@ -518,6 +673,29 @@ def main(argv: list[str] | None = None) -> int:
                 print(sorted_res)
             else:
                 print(res)
+
+    elif args.mode == "collect-pdfs":
+        papers_root = args.path or PDF_ROOT
+        if not args.output_path:
+            print("Please provide an output directory with -o/--output-path.")
+            return 1
+        if not os.path.isdir(papers_root):
+            print(f"Papers root not found: {papers_root}")
+            return 1
+        collect_pdfs(papers_root, args.output_path, original_names=args.original_names)
+
+    elif args.mode == "lookup-pdf":
+        if not args.query:
+            print("Please provide a value to look up with --query.")
+            return 1
+        # Source: an explicit mapping.json or papers root via -p, else default.
+        source = args.path or args.annotations_file or PDF_ROOT
+        matches = lookup_pdf(args.query, source)
+        if not matches:
+            print(f"No match for {args.query!r} in {source}")
+            return 1
+        for m in matches:
+            print(f"{m['hash']}  <->  {m.get('original_name') or '(unknown)'}")
 
     elif args.remove_duplicates:
         coco = COCO(args.annotations_file)

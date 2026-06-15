@@ -173,10 +173,11 @@ def run_pipeline(
         gt_path: Optional[Path] = None
         markdown_dir: Optional[Path] = None
         try:
-            gt_path, gt_pages = _write_omnidocbench_gt(
-                dataset, odb_dir, category_map,
-                text_stub=use_stub, text_source=pdf_text_source,
-            )
+            if False: # TODO: add back
+                gt_path, gt_pages = _write_omnidocbench_gt(
+                    dataset, odb_dir, category_map,
+                    text_stub=use_stub, text_source=pdf_text_source,
+                )
             # Predictions: one combined JSON per model. With real PDF text
             # each pred box's own crop is queried; the IoU-to-GT relabel is
             # only needed in stub mode (where tokens must match exactly).
@@ -192,7 +193,7 @@ def run_pipeline(
                 )
                 # Per-page markdown for OmniDocBench's `data_md/predictions` mount.
                 markdown_dir = odb_dir / f"markdown_pred_{model_name}"
-                emit_stub_markdown(pred_pages, markdown_dir)
+                # emit_stub_markdown(pred_pages, markdown_dir) # TODO: currently out of scope for pipeline track
         finally:
             if pdf_text_source is not None:
                 pdf_text_source.close()
@@ -202,13 +203,14 @@ def run_pipeline(
         # so they appear as columns in report.md. Per-model result dir keeps
         # accumulated models from clobbering each other's `predictions_*` files.
         if run_omnidocbench and gt_path is not None and markdown_dir is not None:
-            from rare.evaluate.omnidocbench_docker import run_eval, DEFAULT_IMAGE
+            from rare.evaluate.omnidocbench_docker import run_eval, DEFAULT_LAYOUT_IMAGE
 
             odb_metrics = run_eval(
                 gt_path=gt_path,
                 pred_md_dir=markdown_dir,
                 result_dir=odb_dir / f"results_{model_name}",
-                image=omnidocbench_image or DEFAULT_IMAGE,
+                image=omnidocbench_image or DEFAULT_LAYOUT_IMAGE,
+                type='detection'
             )
             aggregates.update(odb_metrics)
 

@@ -74,10 +74,45 @@ Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumu
 
 Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_model/}`.
 
+#### OmniDocBench Layout detection metrics (`--run-omnidocbench`)
+
+The pipeline track can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s layout evaluator, including **mAP**. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
+
+Before running, clone the [OmniDocBench](https://github.com/opendatalab/OmniDocBench) repository:
+```bash
+git clone https://github.com/opendatalab/OmniDocBench.git
+```
+Switch to `v1_5` branch:
+```bash
+git switch v1_5
+```
+Copy the Dockerfile from [OmnoDocBench-Dockerfile](./OmniDocBench-Dockerfile) to the root of the cloned repository and build the Docker image:
+```bash
+docker build -t omnidocbench-v15 .
+```
+
+Then run:
+```bash
+# Pipeline track — implies --emit-omnidocbench. With --pdfs-dir, ground-truth
+# region text is filled from the PDF (real text Edit distance); without it,
+# stub tokens are used and only reading-order box placement is measured.
+rare evaluate --track pipeline --dataset glasbena_mladina \
+    --layout doclayout-yolo --order top-bottom \
+    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
+```
+
 #### OmniDocBench Edit distance (`--run-omnidocbench`)
 
-Both tracks can additionally run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s end-to-end evaluator and fold the `text_block` and `reading_order` **Edit distance** into `report.md`. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
+Both tracks can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s end-to-end evaluator and fold the `text_block` and `reading_order` **Edit distance** into `report.md`. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
 
+_TODO - introduce Edit distance metric for pipeline track, as it currently only works for VLM track._
+
+Before running, pull the following image:
+```bash
+docker pull ghcr.io/zeng-weijun/omnidocbench-eval:repro-ubuntu2204
+```
+
+Then run:
 ```bash
 # Pipeline track — implies --emit-omnidocbench. With --pdfs-dir, ground-truth
 # region text is filled from the PDF (real text Edit distance); without it,
@@ -111,7 +146,7 @@ rare tools -m review-annotations -a cleaned.json -s reviewed/
 
 ## Supported Models
 
-The supported models (and therefore given Python version recommendations) were testeed using:
+The supported models (and therefore given Python version recommendations) were tested using:
 - Ubuntu 24.04
 - CUDA 12.8
 
@@ -408,6 +443,27 @@ And then:
 python -m pip install "paddleocr[all]"
 ```
 
+-
+
+### Claude
+
+TODO
+
+https://platform.claude.com/docs/en/build-with-claude/pdf-support
+
+### DeepSeek
+
+TODO
+
+### Gemini
+
+TODO
+
+https://ai.google.dev/gemini-api/docs/document-processing
+
+### GPT
+
+TODO
 
 ## Evaluation
 
@@ -463,7 +519,8 @@ Top priority:
   - [ ] Gemini Pro 3.1
   - [ ] Anthropic Claude Fable 5 / Opus 4.8
   - [ ] DeepSeek V3
-- [ ] Add OmniDocBench evaluation support for pipeline track
+- [x] Add OmniDocBench evaluation support for pipeline track
+  - [ ] Fix classes and other issues in OmniDocBench layout evaluation
 - [ ] Evaluate all pipeline and VLM models
 
 Lower priority:

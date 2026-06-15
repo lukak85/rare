@@ -126,3 +126,7 @@ def general_prompt() -> str:
 
 def whole_pdf_prompt() -> str:
     return WHOLE_PDF_PROMPT.format(labels=GLASANA_LABELS)
+
+
+def omnidocbench_pdf_prompt() -> str:
+    return OMNIDOCBENCH_PROMPT.format(labels=GLASANA_LABELS)

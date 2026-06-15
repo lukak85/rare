@@ -110,6 +110,26 @@ def _bbox_to_poly(bbox: list[float]) -> list[float]:
     return [x, y, x + w, y, x + w, y + h, x, y + h]
 
 
+def _bbox_to_xyxy(bbox: list[float]) -> list[float]:
+    """COCO `[x, y, w, h]` → axis-aligned `[x_min, y_min, x_max, y_max]`."""
+    x, y, w, h = (float(v) for v in bbox)
+    return [x, y, x + w, y + h]
+
+
+def _detection_image_name(file_name: str) -> str:
+    """Strip the extension from a COCO `file_name` for the simple-format
+    `image_name` field.
+
+    OmniDocBench's `DetectionDatasetSimpleFormat` loader keys predictions by
+    `pred["image_name"] + ".jpg"` and matches that against the GT
+    `page_info.image_path` (which equals the COCO `file_name`). So `image_name`
+    must be the file name *without* its extension; the loader re-appends a
+    hard-coded `.jpg`. Our rendered pages are `.jpg`, so this round-trips. Any
+    directory component is preserved, matching the GT path verbatim.
+    """
+    return str(Path(file_name).with_suffix(""))
+
+
 def _page_no_from_filename(file_name: str) -> int:
     """Mirror the `<stem>_<page>.<ext>` convention used in
     `src/rare/evaluate/datasets.py:182-188`. Returns 0 when the suffix is
@@ -258,6 +278,76 @@ def coco_to_omnidocbench(
     ]
 
 
+def coco_to_detection_prediction(
+    coco_doc: dict,
+    category_map: Optional[dict[str, str]] = None,
+    default_score: float = 1.0,
+) -> dict:
+    """Convert a COCO *prediction* document into OmniDocBench's
+    `detection_dataset_simple_format` prediction JSON (the layout-detection
+    counterpart to `coco_to_omnidocbench`).
+
+    The emitted shape — verified against the pinned eval image's loader
+    `dataset/detection_dataset.py::DetectionDatasetSimpleFormat` — is::
+
+        {
+          "results": [
+            {"image_name": "<file_name without ext>",
+             "bbox": [x_min, y_min, x_max, y_max],
+             "category_id": int,
+             "score": float},
+            ...
+          ],
+          "categories": {"<id>": "<category_type>", ...}
+        }
+
+    Unlike `coco_to_omnidocbench`, predictions are *flat* (one entry per box,
+    not grouped per page) and use axis-aligned `bbox` rather than `poly`.
+
+    Category names: source COCO names are mapped to OmniDocBench
+    `category_type` via `DEFAULT_CATEGORY_MAP` (+ `category_map` override),
+    exactly as the GT converter does — so GT and predictions share one
+    vocabulary and a single eval config can reuse `gt_cat_mapping` as
+    `pred_cat_mapping`. Note the loader iterates `pred_cat_mapping`'s keys and
+    looks each up in this `categories` map, so every key your config's
+    `pred_cat_mapping` references must be a `category_type` that actually
+    appears here (otherwise the eval raises `KeyError`).
+
+    Args:
+        coco_doc: COCO `{images, categories, annotations}`. Each annotation may
+            carry a `score`; missing scores default to `default_score`.
+        category_map: Optional override merged on top of `DEFAULT_CATEGORY_MAP`.
+        default_score: Confidence assigned to annotations without a `score`.
+    """
+    cmap = _resolve_map(category_map)
+    name_by_id = {c["id"]: c["name"] for c in coco_doc.get("categories", [])}
+    file_by_image = {img["id"]: img["file_name"] for img in coco_doc.get("images", [])}
+
+    def category_type(ann: dict) -> str:
+        src_name = name_by_id.get(ann["category_id"], "")
+        return _resolve_category(src_name, cmap) if src_name else UNKNOWN_FALLBACK
+
+    anns = coco_doc.get("annotations", [])
+    # Deterministic ids: sort the distinct category_types so output does not
+    # depend on annotation order.
+    id_by_type = {t: i for i, t in enumerate(sorted({category_type(a) for a in anns}))}
+
+    results = [
+        {
+            "image_name": _detection_image_name(file_by_image[ann["image_id"]]),
+            "bbox":       _bbox_to_xyxy(ann["bbox"]),
+            "category_id": id_by_type[category_type(ann)],
+            "score":      float(ann.get("score", default_score)),
+        }
+        for ann in anns
+    ]
+
+    return {
+        "results": results,
+        "categories": {str(i): t for t, i in id_by_type.items()},
+    }
+
+
 def merge_prediction_pages(
     per_image_dicts: Iterable[dict],
     category_map: Optional[dict[str, str]] = None,
@@ -270,11 +360,31 @@ def merge_prediction_pages(
     image; we run it through `coco_to_omnidocbench` and concatenate the
     one-element results.
     """
-    pages: list[dict] = []
+    pages: dict = {"categories": {}, "results": []}
     for doc in per_image_dicts:
+        """
         pages.extend(coco_to_omnidocbench(
             doc, category_map, text_stub=text_stub, text_source=text_source,
         ))
+        """
+        """
+        pages.extend(coco_to_detection_prediction(
+            doc, category_map, default_score=1.0, # TODO: add score
+        ))
+        """
+        page = coco_to_detection_prediction(
+            doc, category_map, default_score=1.0,  # TODO: add score
+        )
+        pages["results"].extend(page["results"])
+        # pages["categories"].update(page["categories"])
+        # TODO: temporary fix, change
+        pages["categories"] = {
+            "0": "title",
+            "1": "plain text",
+            "2": "abandon",
+            "3": "figure",
+            "4": "figure_caption",
+        }
     return pages
 
 
