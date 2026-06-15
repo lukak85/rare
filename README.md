@@ -161,7 +161,7 @@ The supported models (and therefore given Python version recommendations) were t
 | **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | 3.12                       |
 | **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Vision transformers | 3.12                       |
 | **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | 3.14                       |
-| **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal          | _TODO_                     |
+| **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal          | 3.8                        |
 
 \* Included in LayoutParser with detectron2
 
@@ -300,10 +300,34 @@ pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url htt
 
 ### VGT
 
-See the [VGT install notes](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#install-requirements).
-This method requires `.pkl` grid file for each input image. Follow the instructions
-[VGT - Generating grid information](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#generating-grid-information)
-to generate them; point `rare parse` at it via `--config {"grid_root": "<path>"}`.
+The installation instructions largely follow [VGT install notes](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#install-requirements).
+
+After installing RaRe and VGT dependencies, install Pytorch:
+````bash
+pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
+````
+
+Also install `detectron2`:
+```bash
+python -m pip install detectron2==0.6 -f  https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.9/index.html
+```
+
+This method requires `.pkl` grid file for each input image. Therefore before running, generate `pkl` grid information by
+running `create_grid_input.py` from [VGT's Generating grid information](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT#generating-grid-information)
+section. First, an installation of transformers is needed:
+```bash
+pip install transformers
+```
+
+And then run (for each PDF):
+```bash
+python create_grid_input.py \
+--pdf 'path-to-pdf-file' \
+--output 'path-to-output-folder' \
+--tokenizer 'google-bert/bert-base-uncased' \
+--model 'doclaynet'
+```
+Then point `rare parse` or `rare evaluate` at it via `--config {"grid_root": "<path>"}`.
 
 ---
 
