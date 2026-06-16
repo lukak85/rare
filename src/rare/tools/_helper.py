@@ -8,6 +8,8 @@ import shutil
 import cv2
 from pycocotools.coco import COCO
 
+from typing import List, Optional
+
 from layoutparser.visualization import draw_text
 from rare.utils.displayutils import *
 from rare.utils.fileutils import save_coco_to_json, read_json
@@ -136,7 +138,7 @@ def remove_duplicates(coco, annotations_file):
     }
 
 
-def visualize_annotations(coco, image_id, connections=None, save_path=None, visualize_text=False):
+def visualize_annotations(coco, image_id, connections=None, save_path=None, visualize_text=False, images_root=False):
     """Load and display annotations for a single image.
 
     Args:
@@ -147,7 +149,7 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None, visu
         visualize_text: Whether to draw extracted text next to the bounding boxes.
     """
     img_info = coco.loadImgs(coco.getImgIds([int(image_id)]))[0]
-    img_path = os.path.join(IMAGES_ROOT, img_info["file_name"])
+    img_path = os.path.join(IMAGES_ROOT if not images_root else images_root, img_info["file_name"])
     anns = coco.loadAnns(coco.getAnnIds([int(image_id)]))
     layout = load_coco_annotations(anns, categories=coco.cats)
     display_img = cv2.imread(img_path)
@@ -237,7 +239,7 @@ def norm_1000(annotation, shape):
         (annotation[1] + annotation[3]) / shape[1] * 1000,
     ]
 
-def extract_chars_in_boxes(pdf_path: str, page_num: int, bboxes: list[dict]) -> dict:
+def extract_chars_in_boxes(pdf_path: str, page_num: int, bboxes: List[dict]) -> dict:
     """
     bboxes: list of {"id": str, "x0": float, "y0": float, "x1": float, "y1": float}
     Coordinates are in PDF points (origin = bottom-left by default in pdfplumber).
@@ -257,7 +259,7 @@ def extract_chars_in_boxes(pdf_path: str, page_num: int, bboxes: list[dict]) -> 
 
     return results
 
-def load_coco_bboxes(coco_path: str, image_id: int) -> list[dict]:
+def load_coco_bboxes(coco_path: str, image_id: int) -> List[dict]:
     """
     Reads COCO annotations for a given image_id.
     Converts COCO [x, y, w, h] → {"id", "x0", "y0", "x1", "y1"}.
@@ -421,7 +423,7 @@ def lookup_pdf(query, source):
 # Entry point
 # ==============================================================================
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="rare tools", description="Annotation management utilities (was helper.py)")
 
     parser.add_argument(
@@ -442,6 +444,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "-i", "--image-id",
         help="Image ID to visualize",
+        type=str,
+    )
+    parser.add_argument(
+        "-ir", "--images-root",
+        help="Root folder for images",
         type=str,
     )
     parser.add_argument(
@@ -715,7 +722,7 @@ def main(argv: list[str] | None = None) -> int:
         rec = None
         if args.connections_annotations_file:
             rec = json.load(open(args.connections_annotations_file))
-        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text)
+        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text, images_root=args.images_root)
 
     return 0
 
