@@ -127,13 +127,19 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
     from rare.evaluate import datasets as ds_loader
 
-    ds_loader_kwargs = {}
-    if args.data_root:
-        ds_loader_kwargs["root"]=args.data_root
-    if args.pdfs_dir:
-        ds_loader_kwargs["pdfs_dir"]=args.pdfs_dir
-    if args.images_dir:
-        ds_loader_kwargs["images_dir"]=args.images_dir
+    # Only forward kwargs the chosen loader actually accepts; loaders differ
+    # (e.g. omnidocbench takes no `pdfs_dir`, doclaynet/publaynet take neither
+    # `images_dir` nor `pdfs_dir`). The remaining values still reach the runner.
+    import inspect
+    loader_params = inspect.signature(ds_loader.DATASETS[args.dataset]).parameters
+    candidate_kwargs = {
+        "root":       args.data_root,
+        "pdfs_dir":   args.pdfs_dir,
+        "images_dir": args.images_dir,
+    }
+    ds_loader_kwargs = {
+        k: v for k, v in candidate_kwargs.items() if v and k in loader_params
+    }
     dataset = ds_loader.load(args.dataset, **ds_loader_kwargs)
 
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -273,13 +279,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument(
         "--dataset",
         required=True,
-        choices=["glasbena_mladina", "doclaynet", "publaynet"],
+        choices=["glasbena_mladina", "doclaynet", "publaynet", "omnidocbench"],
         help="Dataset name.",
     )
     p_eval.add_argument(
         "--data-root",
         help="Override dataset root (e.g. default: datasets/glasbena_mladina for glasbena_mladina, "
-             "datasets/doclaynet for doclaynet).",
+             "datasets/doclaynet for doclaynet, datasets/OmniDocBench for omnidocbench).",
     )
     p_eval.add_argument(
         "--pdfs-dir",

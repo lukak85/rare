@@ -46,12 +46,25 @@ def _write_omnidocbench_gt(
     text_stub: bool,
     text_source,
 ) -> tuple[Optional[Path], list[dict]]:
-    """Build `<odb_dir>/gt.json` from the dataset's source COCO and return
-    `(gt_path, gt_pages)`. Shared by the pipeline and VLM tracks so both score
-    against an identically-built ground truth. Returns `(None, [])` when the
-    dataset has no COCO file. The GT does not depend on the model, so writing
-    is idempotent across runs.
+    """Build `<odb_dir>/gt.json` and return `(gt_path, gt_pages)`. Shared by the
+    pipeline and VLM tracks so both score against an identically-built ground
+    truth. The GT does not depend on the model, so writing is idempotent across
+    runs.
+
+    Two sources, in priority order:
+      1. `dataset.omnidocbench_path` — a native OmniDocBench GT JSON (already in
+         the target shape, carrying real `text`/`latex`/`html`). Copied through
+         verbatim; the COCO conversion and `text_source` are not used.
+      2. `dataset.coco_path` — a COCO file converted to OmniDocBench shape.
+
+    Returns `(None, [])` when the dataset exposes neither.
     """
+    odb_dir.mkdir(parents=True, exist_ok=True)
+    if dataset.omnidocbench_path is not None:
+        gt_pages = json.loads(Path(dataset.omnidocbench_path).read_text())
+        gt_path = odb_dir / "gt.json"
+        gt_path.write_text(json.dumps(gt_pages, indent=2))
+        return gt_path, gt_pages
     if dataset.coco_path is None:
         return None, []
     gt_doc = json.loads(Path(dataset.coco_path).read_text())
@@ -344,24 +357,31 @@ def _run_vlm_omnidocbench(
     odb_dir = run_dir / "omnidocbench"
     odb_dir.mkdir(parents=True, exist_ok=True)
 
-    # Real-text GT is mandatory here (see run_vlm docstring). Bail loudly rather
-    # than silently producing all-1.0 scores against stub tokens.
-    pdf_root = _resolve_pdfs_dir(pdfs_dir, dataset)
-    if pdf_root is None:
-        print("[omnidocbench] VLM track needs a resolvable --pdfs-dir to build "
-              "real-text ground truth; skipping container eval.")
-        return {}
-
-    pdf_text_source = PdfTextSource(pdf_root)
-    try:
+    if dataset.omnidocbench_path is not None:
+        # Native OmniDocBench GT already carries real text/latex/html, so no PDF
+        # extraction is needed — pass the file through verbatim.
         gt_path, _ = _write_omnidocbench_gt(
-            dataset, odb_dir, category_map,
-            text_stub=False, text_source=pdf_text_source,
+            dataset, odb_dir, category_map, text_stub=False, text_source=None,
         )
-    finally:
-        pdf_text_source.close()
+    else:
+        # Real-text GT is mandatory here (see run_vlm docstring). Bail loudly
+        # rather than silently producing all-1.0 scores against stub tokens.
+        pdf_root = _resolve_pdfs_dir(pdfs_dir, dataset)
+        if pdf_root is None:
+            print("[omnidocbench] VLM track needs a resolvable --pdfs-dir to build "
+                  "real-text ground truth; skipping container eval.")
+            return {}
+
+        pdf_text_source = PdfTextSource(pdf_root)
+        try:
+            gt_path, _ = _write_omnidocbench_gt(
+                dataset, odb_dir, category_map,
+                text_stub=False, text_source=pdf_text_source,
+            )
+        finally:
+            pdf_text_source.close()
     if gt_path is None:
-        print("[omnidocbench] dataset has no COCO file for ground truth; skipping.")
+        print("[omnidocbench] dataset has no ground-truth source; skipping.")
         return {}
 
     # One markdown file per page in OmniDocBench's expected flat layout.

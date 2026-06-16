@@ -42,6 +42,7 @@ class EvalDataset:
     samples: list[EvalSample]
     ground_markdown: dict[str, str] = field(default_factory=dict)  # pdf_stem → md text
     coco_path: Optional[Path] = None  # source COCO annotations file (for OmniDocBench export)
+    omnidocbench_path: Optional[Path] = None  # native OmniDocBench GT JSON (used as gt.json verbatim)
 
     def iter_samples(self) -> Iterator[EvalSample]:
         return iter(self.samples)
@@ -74,6 +75,53 @@ def _coco_to_layout(coco: COCO, image_id: int) -> "lp.Layout":
             )
         )
     return layout
+
+
+def _poly_to_rect(poly: list[float]) -> tuple[float, float, float, float]:
+    """Axis-aligned bounding box (x0, y0, x1, y1) of an OmniDocBench `poly`.
+
+    OmniDocBench polys are 8-number quads [x1,y1, x2,y2, x3,y3, x4,y4]; we take
+    the min/max over the x and y components so rotated/irregular quads still
+    yield a usable lp.Rectangle.
+    """
+    xs = poly[0::2]
+    ys = poly[1::2]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _omnidocbench_to_layout(layout_dets: list[dict]) -> "lp.Layout":
+    """Convert one OmniDocBench page's `layout_dets` into an lp.Layout.
+
+    Each block's `id` is its index within the page so that a reading-order
+    permutation (from the per-det `order` field) indexes the layout directly.
+    """
+    import layoutparser as lp
+    layout = lp.Layout()
+    for idx, det in enumerate(layout_dets):
+        x0, y0, x1, y1 = _poly_to_rect(det["poly"])
+        layout.append(
+            lp.TextBlock(
+                block=lp.Rectangle(x0, y0, x1, y1),
+                type=det["category_type"],
+                id=idx,
+                score=det.get("score", 1.0),
+            )
+        )
+    return layout
+
+
+def _omnidocbench_order(layout_dets: list[dict]) -> Optional[list[int]]:
+    """Reading-order permutation over layout indices from per-det `order` fields.
+
+    Returns indices sorted by `order` (so layout[result[k]] is the k-th region),
+    or None if no det carries an `order`. Dets without an `order` are appended at
+    the end in their original index order.
+    """
+    have_order = [i for i, d in enumerate(layout_dets) if d.get("order") is not None]
+    if not have_order:
+        return None
+    tail = [i for i, d in enumerate(layout_dets) if d.get("order") is None]
+    return sorted(have_order, key=lambda i: layout_dets[i]["order"]) + tail
 
 
 def _order_id_to_order(coco: COCO, image_id: int) -> Optional[list[int]]:
@@ -293,10 +341,64 @@ def load_publaynet(
     return EvalDataset(name=f"publaynet/{ann_path.stem}", samples=samples, coco_path=ann_path)
 
 
+def load_omnidocbench(
+    root: str | Path = "OmniDocBench-data",
+    annotations_file: str | Path | None = None,
+    images_dir: str | Path | None = None,
+    drop_ignore: bool = False,
+) -> EvalDataset:
+    """Load the OmniDocBench dataset in its native JSON format.
+
+    Unlike the COCO-based loaders this reads OmniDocBench's own per-page schema
+    (`OmniDocBench.json`): a JSON array where each entry has `layout_dets`
+    (quad `poly` + `category_type` + `order` + `text`/`latex`/`html`) and a
+    `page_info` block (`page_no`, `width`, `height`, `image_path`). Each entry
+    is one page; the image stem is used as `pdf_stem`.
+
+    `category_type` values are kept verbatim (they already match the
+    OmniDocBench vocabulary produced by `rare.evaluate.omnidocbench`), and the
+    per-det `order` field becomes `ground_order`. Set `drop_ignore=True` to skip
+    dets flagged `ignore` (e.g. mask regions). `coco_path` is left None since
+    the ground truth is already in OmniDocBench shape.
+    """
+    root = Path(root)
+    ann_path = Path(annotations_file) if annotations_file else root / "OmniDocBench.json"
+    if not ann_path.is_absolute():
+        ann_path = ann_path if ann_path.exists() else root / ann_path
+    entries = json.loads(Path(ann_path).read_text())
+
+    img_root = Path(images_dir) if images_dir else root / "images"
+    samples: list[EvalSample] = []
+    for image_id, entry in enumerate(entries):
+        page_info = entry["page_info"]
+        dets = entry["layout_dets"]
+        if drop_ignore:
+            dets = [d for d in dets if not d.get("ignore")]
+
+        file_name = Path(page_info["image_path"]).name
+        samples.append(EvalSample(
+            image_path=img_root / file_name,
+            pdf_stem=Path(file_name).stem,
+            page_no=page_info.get("page_no", 0),
+            image_id=image_id,
+            width=page_info["width"],
+            height=page_info["height"],
+            ground_layout=_omnidocbench_to_layout(dets),
+            ground_order=_omnidocbench_order(dets),
+        ))
+
+    return EvalDataset(
+        name="omnidocbench",
+        samples=samples,
+        omnidocbench_path=Path(ann_path),
+    )
+
+
 DATASETS = {
     "glasbena_mladina": load_glasbena_mladina,
     "doclaynet":        load_doclaynet,
     "publaynet":        load_publaynet,
+    "omnidocbench":     load_omnidocbench,
 }
 
 
