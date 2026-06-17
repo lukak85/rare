@@ -6,6 +6,14 @@ from rare.config.paths import WEIGHTS_PATH
 from rare.models.registry import register
 
 
+OMNIDOCBENCH_PRED_CAT_MAPPING ="""\
+title : title
+plain text: text
+abandon: abandon
+figure: figure
+figure_caption: figure_caption
+"""
+
 @register("layout", "doclayout-yolo")
 class DocLayoutYOLOBackend:
     def __init__(self, config: dict | None = None):

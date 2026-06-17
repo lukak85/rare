@@ -199,8 +199,8 @@ def run_pipeline(
                     coco_predictions, category_map,
                     text_stub=use_stub, text_source=pdf_text_source,
                 )
-                if use_stub and gt_pages:
-                    relabel_predictions_to_gt(pred_pages, gt_pages)
+                # if use_stub and gt_pages:
+                #     relabel_predictions_to_gt(pred_pages, gt_pages)
                 (odb_dir / f"{model_name}_pred.json").write_text(
                     json.dumps(pred_pages, indent=2)
                 )
@@ -223,7 +223,8 @@ def run_pipeline(
                 pred_md_dir=markdown_dir,
                 result_dir=odb_dir / f"results_{model_name}",
                 image=omnidocbench_image or DEFAULT_LAYOUT_IMAGE,
-                type='detection'
+                type='detection',
+                omnidocbench_pred_cat_mapping=layout.OMNIDOCBENCH_PRED_CAT_MAPPING
             )
             aggregates.update(odb_metrics)
 

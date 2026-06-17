@@ -1,0 +1,4 @@
+{
+  "model": "./data/model/doclayoutyolo/doclayout_yolo_d4la_imgsz1600_docsynth_pretrain.pt",
+  "label_map": "D4LA"
+}

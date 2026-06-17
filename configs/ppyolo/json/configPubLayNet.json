@@ -1,0 +1,4 @@
+{
+    "config_path":"./data/model/ppyolo/publaynet/ppyolov2_r50vd_dcn_365e_publaynet",
+    "label_map": "PubLayNet"
+}

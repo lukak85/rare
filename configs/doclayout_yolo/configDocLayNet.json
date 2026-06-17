@@ -1,0 +1,4 @@
+  {
+    "model": "./data/model/doclayoutyolo/doclayout_yolo_doclaynet_imgsz1120_docsynth_pretrain.pt",
+    "label_map": "DocLayNet"
+  }

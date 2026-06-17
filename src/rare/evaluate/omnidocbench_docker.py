@@ -57,12 +57,18 @@ def _build_config_yaml() -> str:
     timeout_fallback_order_penalty: 0.10
 """
 
-def _build_config_layout_yaml() -> str:
+def _build_config_layout_yaml(pred_cat_mapping: Optional[str] = """\
+                              title : title
+                              plain text: text
+                              abandon: abandon
+                              figure: figure
+                              figure_caption: figure_caption
+                              """) -> str:
     """The end2end config, mirroring run.sh minus the `display_formula` block.
     CDM (the formula visual metric) is the only part that needs the heavy
     in-container LaTeX stack and it's irrelevant for formula-free documents
     (e.g. magazines), so we score only `text_block` and `reading_order`."""
-    return """detection_eval:   # Specify task name, common for all detection-related tasks
+    return f"""detection_eval:   # Specify task name, common for all detection-related tasks
   metrics:
     - COCODet     # Detection task related metrics, mainly mAP, mAR etc.
   dataset:
@@ -91,11 +97,7 @@ def _build_config_layout_yaml() -> str:
       text_block: text
       footer: abandon
     pred_cat_mapping:       # Mapping table from prediction to final evaluation categories, key is prediction category, value is final evaluation category name
-      title : title
-      plain text: text
-      abandon: abandon
-      figure: figure
-      figure_caption: figure_caption
+      f{pred_cat_mapping}
 """
 
 
@@ -104,18 +106,19 @@ def _docker_command(
     pred_md_dir: Path,
     result_dir: Path,
     image: str,
-    type: str='end2end'
+    type: str='end2end',
+    omnidocbench_pred_cat_mapping: Optional[str] = None,
 ) -> list[str]:
     """Assemble the `docker run ... bash -c <heredoc>` invocation from run.sh."""
     if type == 'end2end':
-        config = _build_config_yaml()
-    elif type == 'detection':
-        config = _build_config_layout_yaml()
+        config_yaml = _build_config_yaml()
+    else:
+        config_yaml = _build_config_layout_yaml(omnidocbench_pred_cat_mapping)
     # Same shape as run.sh: write the config inside the container, then run the
     # validator. The heredoc keeps us from needing an extra host file + mount.
     inner = (
         'cat > configs/custom.yaml << "EOF"\n'
-        f"{config}"
+        f"{config_yaml}"
         "EOF\n"
         "python pdf_validation.py --config configs/custom.yaml"
     )
@@ -144,7 +147,7 @@ def parse_metric_result(result_dir: Path) -> dict[str, float]:
     """Read `<result_dir>/predictions_quick_match_metric_result.json` and pull
     out the headline Edit-distance numbers as a flat `{metric: value}` dict
     suitable for merging into a per-model `aggregates` block.
-
+omnidocbench_pred_cat_mapping
     We surface the per-sample average (OmniDocBench's standard headline figure)
     for `text_block` and `reading_order`. Missing/NaN metrics are omitted.
     """
@@ -177,6 +180,7 @@ def run_eval(
     image: str = DEFAULT_IMAGE,
     timeout: Optional[int] = None,
     type: str='end2end',
+    omnidocbench_pred_cat_mapping: str=None,
 ) -> dict[str, float]:
     """Run the OmniDocBench container and return parsed Edit-distance metrics.
 
@@ -193,7 +197,7 @@ def run_eval(
     result_dir.mkdir(parents=True, exist_ok=True)
     result_dir = result_dir.resolve()
 
-    cmd = _docker_command(gt_path, pred_md_dir, result_dir, image, type=type)
+    cmd = _docker_command(gt_path, pred_md_dir, result_dir, image, type=type, omnidocbench_pred_cat_mapping=omnidocbench_pred_cat_mapping)
     print(f"[omnidocbench] running container {image} ...")
     try:
         proc = subprocess.run(cmd, timeout=timeout)

@@ -546,6 +546,7 @@ Top priority:
 - [x] Add OmniDocBench evaluation support for pipeline track
   - [ ] Fix classes and other issues in OmniDocBench layout evaluation
 - [ ] Evaluate all pipeline and VLM models
+- [ ] Add mappings from other datasets (PubLayNet, DocBank, DocLayNet) to GlasanaDocument schema for evaluation
 
 Lower priority:
 - [ ] Add support for Paragraph2Graph, M2Doc

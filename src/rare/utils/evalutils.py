@@ -8,6 +8,8 @@ from collections import Counter
 
 from typing import List
 
+from layoutparser.elements import Layout
+
 # All Unicode punctuation characters plus standard ASCII punctuation
 PUNCT = {
     chr(i)
@@ -49,7 +51,7 @@ def f1_score(prediction, ground_truth):
     return (2 * precision * recall) / (precision + recall)
 
 
-def mean_average_precision(predictions, ground_truths):
+def mean_average_precision(predictions: Layout, ground_truths: Layout) -> dict[str, float]:
     """Compute mean average precision (mAP) for bounding box detections.
 
     Args:
@@ -73,6 +75,16 @@ def mean_average_precision(predictions, ground_truths):
         for p in predictions
     ]
 
+    pred_scores = [p.score for p in predictions]
+
+    # Convert classes to integer labels for torchmetrics
+    target_classes = list(set(t.type for t in ground_truths))
+    prediction_classes = list(set(t.type for t in predictions))
+    class_to_idx = {cls: idx for idx, cls in enumerate(target_classes + prediction_classes)}
+
+    target_classes = [class_to_idx[t.type] for t in ground_truths]
+    pred_classes = [class_to_idx[p.type] for p in predictions]
+
     t_boxes = torch.tensor(target_boxes, dtype=torch.float32)
     p_boxes = torch.tensor(pred_boxes, dtype=torch.float32)
 
@@ -82,12 +94,12 @@ def mean_average_precision(predictions, ground_truths):
     # Wrap in single-image format expected by torchmetrics
     preds = [{
         "boxes": torch.tensor(p_boxes_xyxy, dtype=torch.float32),
-        "scores": torch.ones(len(p_boxes_xyxy)),
-        "labels": torch.ones(len(p_boxes_xyxy), dtype=torch.long),
+        "scores": torch.tensor(pred_scores, dtype=torch.float32),
+        "labels": torch.tensor(pred_classes, dtype=torch.int64),
     }]
     targets = [{
         "boxes": torch.tensor(t_boxes_xyxy, dtype=torch.float32),
-        "labels": torch.ones(len(t_boxes_xyxy), dtype=torch.long),
+        "labels": torch.tensor(target_classes, dtype=torch.int64),
     }]
 
     metric = MeanAveragePrecision(iou_type="bbox")
