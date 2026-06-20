@@ -6,7 +6,7 @@ import sys
 import unicodedata
 from collections import Counter
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from layoutparser.elements import Layout
 
@@ -66,7 +66,7 @@ def mean_average_precision(
     gt_category_map: Optional[dict] = None,
     class_agnostic: bool = False,
     class_metrics: bool = False,
-) -> dict[str, float]:
+) -> Dict[str, float]:
     """Compute mean average precision (mAP) for bounding box detections.
 
     mAP is computed per class: a prediction only matches a ground-truth box when
