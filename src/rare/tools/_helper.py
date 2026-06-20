@@ -443,6 +443,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         type=str,
     )
     parser.add_argument(
+        "--annotations-file-to-compare",
+        help="Path to the COCO annotation file to compare against",
+        type=str,
+    )
+    parser.add_argument(
         "-b", "--box-id",
         help="Bounding box ID to focus on.",
         type=str,
@@ -467,11 +472,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Root folder for images",
         type=str,
     )
+    parser.add_argument("--layout", help="Layout backend (pipeline track).")
     parser.add_argument(
         "-m", "--mode",
         help="Action: join-annotations, prepare-annotations, order-images, "
              "remove-scores, review-annotations, count-annotations, text-extraction, "
-             "collect-pdfs, lookup-pdf or visualize (default)",
+             "collect-pdfs, lookup-pdf, evaluate-layout or visualize (default)",
         type=str,
         default="visualize",
     )
@@ -655,6 +661,42 @@ def main(argv: Optional[List[str]] = None) -> int:
             annotation["id"] = anno_id
             annotation["segmentation"] = None
         save_coco_to_json(coco_data, args.output_path)
+
+    elif args.mode == "evaluate-layout":
+        if not args.annotations_file or not args.annotations_file_to_compare:
+            print("Please provide both an annotation file and a file to compare against.")
+            return 1
+        if not args.image_id:
+            print("Please provide an image ID to visualize.")
+            return 1
+        if not args.layout:
+            print("Please provide a layout backend.")
+            return 1
+        if not args.dataset:
+            print("Please provide dataset type (such as Glasana, PubLayNet, D4LA).")
+            return 1
+
+        coco = COCO(args.annotations_file)
+        coco_compare = COCO(args.annotations_file_to_compare)
+
+        from ..evaluate.pipeline_eval import score_layout
+        anns = coco.loadAnns(coco.getAnnIds([int(args.image_id)]))
+        anns_compare = coco_compare.loadAnns(coco_compare.getAnnIds([int(args.image_id)]))
+        layout = load_coco_annotations(anns, categories=coco.cats)
+        layout_compare = load_coco_annotations(anns_compare, categories=coco_compare.cats)
+
+        pred_category_map = None
+
+        from ..evaluate.omnidocbench import DEFAULT_CATEGORY_MAP
+        if args.layout == 'doclayout-yolo':
+            from ..models.layout.doclayout_yolo import PRED_CATEGORY_MAPS
+            pred_category_map = PRED_CATEGORY_MAPS[args.dataset]
+
+        gt_category_map = DEFAULT_CATEGORY_MAP
+
+        results = score_layout(layout, layout_compare, pred_category_map=pred_category_map, gt_category_map=gt_category_map)
+
+        print(results)
 
     elif args.mode == "text-extraction":
         if not args.annotations_file:

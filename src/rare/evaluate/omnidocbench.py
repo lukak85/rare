@@ -50,9 +50,9 @@ DEFAULT_CATEGORY_MAP: dict[str, str] = {
     "Section":       "title",
     "Subhead":       "title",
     "Subsubhead":    "title",
-    "Deck":          "title",
     "Kicker":        "title",
     # text bodies
+    "Deck":          "text_block",
     "Paragraph":     "text_block",
     "Quote":         "text_block",
     "Literary":      "text_block",
