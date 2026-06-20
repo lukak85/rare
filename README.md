@@ -234,6 +234,9 @@ _TODO (VLM track)_
 
 ## Additional model-specific setup
 
+<details>
+<summary><b>Additional model-specific setup</b></summary>
+
 ### DiT
 
 The installation roughly follows that of [DiT install notes](https://github.com/microsoft/unilm/tree/master/dit#setup).
@@ -488,6 +491,8 @@ https://ai.google.dev/gemini-api/docs/document-processing
 ### GPT
 
 TODO
+
+</details>
 
 ## Evaluation
 

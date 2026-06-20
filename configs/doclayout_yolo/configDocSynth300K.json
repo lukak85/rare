@@ -1,4 +1,0 @@
-  {
-    "model": "./data/model/doclayoutyolo/doclayout_yolo_docsynth300k_imgsz1600.pt",
-    "label_map": "DocSynth300K",
-  }

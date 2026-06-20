@@ -14,6 +14,50 @@ COLOR_MAP = {
     "Header": "orange",
 }
 
+DOCLAYNET_COLOR_MAP = {
+    "Caption": "red",
+    "Footnote": "blue",
+    "Formula": "green",
+    "List-item": "purple",
+    "Page-footer": "pink",
+    "Page-header": "orange",
+    "Picture": "yellow",
+    "Section-header": "brown",
+    "Table": "cyan",
+    "Text": "grey",
+    "Title": "magenta"
+}
+
+D4LA_COLOR_MAP = {
+    "DocTitle": "red",
+    "ParaTitle": "blue",
+    "ParaText": "green",
+    "ListText": "purple",
+    "RegionTitle": "pink",
+    "Date": "orange",
+    "LetterHead": "cyan",
+    "LetterDear": "magenta",
+    "LetterSign": "yellow",
+    "Question": "brown",
+    "OtherText": "grey",
+    "RegionKV": "olive",
+    "RegionList": "teal",
+    "Abstract": "cyan",
+    "Author": "cyan",
+    "TableName": "blue",
+    "Table": "blue",
+    "Figure": "blue",
+    "FigureName": "blue",
+    "Equation": "blue",
+    "Reference": "blue",
+    "Footer": "orange",
+    "PageHeader": "orange",
+    "PageFooter": "orange",
+    "Number": "orange",
+    "Catalog": "orange",
+    "PageNumber": "orange",
+}
+
 # Color map matching our annotation categories
 GLASANA_COLOR_MAP = {
     "Header": "#9EA3FF",
@@ -54,6 +98,7 @@ def draw_layout(
     layout,
     save_path=None,
     has_score=False,
+    color_map=GLASANA_COLOR_MAP,
     order=None,
     order_color="blue",
     order_line_width=2,
@@ -72,7 +117,7 @@ def draw_layout(
     viz = lp.draw_box(
         img,
         [b.set(id=f"{b.score:.2f}/{b.type}" if has_score else f"{b.type}") for b in layout],
-        color_map=GLASANA_COLOR_MAP,
+        color_map=color_map,
         show_element_id=True,
         id_font_size=10,
         id_text_background_color="grey",

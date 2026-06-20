@@ -40,14 +40,13 @@ CATEGORIES = [
 ]
 
 # Default category ID for labels not found in the mapping
-DEFAULT_CATEGORY_ID = 4  # Kicker
+DEFAULT_CATEGORY_ID = 1
 
 
 def layout_parser_to_coco(
     layout,
     img_info,
     categories,
-    category_mapping=DOCLAYOUT_YOLO_PUBLAY_TO_OUR_LABEL_MAP,
     predicted_order=None,
 ):
     """Convert a layoutparser Layout to COCO annotation format.
@@ -73,8 +72,9 @@ def layout_parser_to_coco(
 
     annotations = []
 
+    name_to_id = {v: k for k, v in categories.items()}
     for idx, block in enumerate(layout, start=1):
-        category_id = category_mapping.get(block.type, DEFAULT_CATEGORY_ID)
+        category_id = name_to_id.get(block.type, DEFAULT_CATEGORY_ID)
         x_min, y_min, x_max, y_max = block.coordinates
         width = x_max - x_min
         height = y_max - y_min
@@ -92,6 +92,13 @@ def layout_parser_to_coco(
             ann["order_id"] = rank_by_layout_idx.get(idx - 1, -1)
         annotations.append(ann)
 
+    coco_categories = [
+        {
+            "id": name,
+            "name": value
+        } for name, value in categories.items()
+    ]
+
     return {
         "images": [{
             "id": img_info["id"],
@@ -100,5 +107,5 @@ def layout_parser_to_coco(
             "height": img_info["height"],
         }],
         "annotations": annotations,
-        "categories": CATEGORIES,
+        "categories": coco_categories,
     }

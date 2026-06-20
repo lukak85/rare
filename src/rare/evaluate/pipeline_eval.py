@@ -11,26 +11,58 @@ if TYPE_CHECKING:
     import layoutparser as lp
 
 
-LAYOUT_METRICS = {"map", "map_50", "map_75"}
+LAYOUT_METRICS = {"map", "map_50", "map_75", "map_cat", "map_50_cat", "map_75_cat"}
 ORDER_METRICS = {"kendall_tau", "matched_pairs"}
 METRICS = LAYOUT_METRICS | ORDER_METRICS
 
 
-def score_layout(predicted: "lp.Layout", ground: "lp.Layout") -> dict[str, float]:
-    """Compute mAP / mAP@50 / mAP@75 between predicted and ground layouts.
+def score_layout(
+    predicted: "lp.Layout",
+    ground: "lp.Layout",
+    pred_category_map: Optional[dict[str, str]] = None,
+    gt_category_map: Optional[dict[str, str]] = None,
+) -> dict[str, float]:
+    """Compute mAP between predicted and ground layouts, twice:
 
-    All predictions are scored as a single (class-agnostic) label, matching
-    the existing `mean_average_precision` helper.
+    - `map` / `map_50` / `map_75`: **class-agnostic** — every box collapses to a
+      single label. Pure localization quality, independent of taxonomy. This is
+      the honest cross-dataset headline: a detector trained on DocLayNet can be
+      compared to one trained on your data without either being penalised for
+      naming a region differently.
+    - `map_cat` / `map_50_cat` / `map_75_cat`: **category-aware** — both sides
+      are translated into a shared label space (OmniDocBench `category_type`)
+      via `pred_category_map` (model vocabulary) and `gt_category_map` (your
+      source vocabulary), then scored per class. Tells you how well the model
+      serves *your* schema. Only emitted when at least one map is supplied;
+      otherwise it would just duplicate the same-vocabulary case.
     """
     if len(predicted) == 0 or len(ground) == 0:
-        return {"map": 0.0, "map_50": 0.0, "map_75": 0.0}
+        zero = {"map": 0.0, "map_50": 0.0, "map_75": 0.0}
+        if pred_category_map or gt_category_map:
+            zero.update({"map_cat": 0.0, "map_50_cat": 0.0, "map_75_cat": 0.0})
+        return zero
 
-    result = mean_average_precision(predicted, ground)
-    return {
-        "map":    float(result["map"].item()),
-        "map_50": float(result["map_50"].item()),
-        "map_75": float(result["map_75"].item()),
+    agnostic = mean_average_precision(predicted, ground, class_agnostic=True)
+    out = {
+        "map":    float(agnostic["map"].item()),
+        "map_50": float(agnostic["map_50"].item()),
+        "map_75": float(agnostic["map_75"].item()),
     }
+
+    if pred_category_map or gt_category_map:
+        mapped = mean_average_precision(
+            predicted, ground,
+            pred_category_map=pred_category_map,
+            gt_category_map=gt_category_map,
+            class_metrics = True
+        )
+        out.update({
+            "map_cat":    float(mapped["map"].item()),
+            "map_50_cat": float(mapped["map_50"].item()),
+            "map_75_cat": float(mapped["map_75"].item()),
+        })
+
+    return out
 
 
 def score_order(

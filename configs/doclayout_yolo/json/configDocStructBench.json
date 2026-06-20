@@ -1,0 +1,4 @@
+  {
+    "model": "./data/model/doclayoutyolo/doclayout_yolo_docstructbench_imgsz1024.pt.pt",
+    "label_map": "DocSynth300K"
+  }

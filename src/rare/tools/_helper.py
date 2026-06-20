@@ -14,6 +14,13 @@ from layoutparser.visualization import draw_text
 from rare.utils.displayutils import *
 from rare.utils.fileutils import save_coco_to_json, read_json
 
+from ..utils.displayutils import D4LA_COLOR_MAP, GLASANA_COLOR_MAP
+COLOR_MAP_DATASETS = {
+    "D4LA": D4LA_COLOR_MAP,
+    "DocLayNet": DOCLAYNET_COLOR_MAP,
+    "GLASANA": GLASANA_COLOR_MAP
+}
+
 IMAGES_ROOT = "datasets/glasbena_mladina/images"
 PDF_ROOT = "annotation/pawls/skiff_files/apps/pawls/papers/"
 STATUS_JSON = "annotation/pawls/skiff_files/apps/pawls/papers/status/development_user@example.com.json"
@@ -138,7 +145,7 @@ def remove_duplicates(coco, annotations_file):
     }
 
 
-def visualize_annotations(coco, image_id, connections=None, save_path=None, visualize_text=False, images_root=False):
+def visualize_annotations(coco, image_id, connections=None, save_path=None, visualize_text=False, images_root=False, dataset="Glasna"):
     """Load and display annotations for a single image.
 
     Args:
@@ -147,6 +154,7 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None, visu
         connections: A loaded JSON object containing connections between regions.
         save_path: Optional path to save the visualization.
         visualize_text: Whether to draw extracted text next to the bounding boxes.
+        dataset: The dataset type for color mapping.
     """
     img_info = coco.loadImgs(coco.getImgIds([int(image_id)]))[0]
     img_path = os.path.join(IMAGES_ROOT if not images_root else images_root, img_info["file_name"])
@@ -165,16 +173,17 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None, visu
             coco_id_order = [id_map[i] for i in tgt_index if i in id_map]
             index_map = {id_: i for i, id_ in enumerate(sorted(coco_id_order))}
             positions = [index_map[id_] for id_ in coco_id_order]
-        draw_layout(display_img, layout, order=positions, save_path=save_path)
+        draw_layout(display_img, layout, order=positions, save_path=save_path, color_map=COLOR_MAP_DATASETS.get(dataset))
 
 
-def visualize_all_images(coco, save_path=None, skip_hashes=None):
+def visualize_all_images(coco, save_path=None, skip_hashes=None, dataset="Glasna"):
     """Visualize annotations for all images, optionally skipping some.
 
     Args:
         coco: A loaded COCO object.
         save_path: Optional path to save the visualizations.
         skip_hashes: Set of document hashes to skip.
+        dataset: The dataset type for color mapping.
     """
     for image_id in coco.imgs:
         img_info = coco.loadImgs(coco.getImgIds([int(image_id)]))[0]
@@ -188,7 +197,7 @@ def visualize_all_images(coco, save_path=None, skip_hashes=None):
         anns = coco.loadAnns(coco.getAnnIds([int(image_id)]))
         layout = load_coco_annotations(anns, categories=coco.cats)
         display_img = cv2.imread(img_path)
-        draw_layout(display_img, layout, save_path=save_path)
+        draw_layout(display_img, layout, save_path=save_path, color_map=COLOR_MAP_DATASETS.get(dataset))
 
 def iou(b1, b2):
     # b = [x, y, w, h] in COCO convention
@@ -442,6 +451,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         type=str,
     )
     parser.add_argument(
+        "-d", "--dataset",
+        help="Dataset type (e.g., Glasana, PubLayNet, D4LA)",
+        type=str,
+    )
+    parser.add_argument(
         "-i", "--image-id",
         help="Image ID to visualize",
         type=str,
@@ -518,7 +532,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         # Visualize for review
         coco = COCO(output_json)
-        visualize_all_images(coco, save_path=args.save_visualization)
+        visualize_all_images(coco, save_path=args.save_visualization, dataset=args.dataset)
 
     elif args.mode == "order-images":
         if not args.annotations_file:
@@ -717,12 +731,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not args.image_id:
             print("Please provide an image ID to visualize.")
             return 1
+        if not args.dataset:
+            print("Please provide dataset type (such as Glasana, PubLayNet, D4LA).")
+            return 1
 
         coco = COCO(args.annotations_file)
         rec = None
         if args.connections_annotations_file:
             rec = json.load(open(args.connections_annotations_file))
-        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text, images_root=args.images_root)
+        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text, images_root=args.images_root, dataset=args.dataset)
 
     return 0
 

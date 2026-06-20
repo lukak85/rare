@@ -28,6 +28,7 @@ from rare.evaluate.omnidocbench import (
     emit_stub_markdown,
     merge_prediction_pages,
     relabel_predictions_to_gt,
+    _resolve_map,
 )
 from rare.doc.renderers import to_markdown, to_markdown_pages
 from rare.utils.conversionutils import layout_parser_to_coco
@@ -119,6 +120,14 @@ def run_pipeline(
     per_image: list[dict] = []
     coco_predictions: list[dict] = []
 
+    # Category-aware mAP needs both taxonomies translated into the shared
+    # OmniDocBench space. GT (source COCO names) is resolved via the same map the
+    # OmniDocBench export uses. Predictions use the backend's own map; when the
+    # backend declares none, its predictions already share the GT vocabulary
+    # (e.g. DocLayout-YOLO's "Glasana" label_map), so we reuse the GT map.
+    gt_category_map = _resolve_map(category_map)
+    pred_category_map = getattr(layout, "pred_category_map", None) or gt_category_map
+
     samples = list(dataset.iter_samples())
     if limit:
         samples = samples[:limit]
@@ -141,7 +150,11 @@ def run_pipeline(
             "file_name":     sample.image_path.name,
             "predicted_order": list(predicted_order),
         }
-        row.update(score_layout(predicted, sample.ground_layout))
+        row.update(score_layout(
+            predicted, sample.ground_layout,
+            pred_category_map=pred_category_map,
+            gt_category_map=gt_category_map,
+        ))
         if sample.ground_order is not None:
             row.update(score_order(
                 predicted, predicted_order, sample.ground_layout, sample.ground_order
@@ -149,7 +162,7 @@ def run_pipeline(
         per_image.append(row)
 
         if save_coco:
-            categories = {1: {"id": 1, "name": "Region"}}
+            categories = layout.label_map
             image_info = {
                 "id":        sample.image_id,
                 "file_name": sample.image_path.name,

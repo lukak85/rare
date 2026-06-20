@@ -196,6 +196,7 @@ def load_glasbena_mladina(
     pdfs_dir: str | Path | None = None,
     ground_markdown_dir: str | Path | None = None,
     annotations_file: str | Path | None = None,
+    omnidocbench_file: str | Path | None = None,
 ) -> EvalDataset:
     """Load the Glasbena Mladina annotated dataset.
 
@@ -208,6 +209,12 @@ def load_glasbena_mladina(
     back to IoU-matching `connections.json` at load time. `annotations_file`
     overrides which COCO file to load; by default `annotations_with_order.json`
     is preferred over `annotations.json` when it exists in `root`.
+
+    `omnidocbench_file` points at a pre-built native OmniDocBench GT JSON; the
+    runner then uses it as `gt.json` verbatim (no COCO→OmniDocBench conversion
+    or runtime PDF text extraction), exactly like the `omnidocbench` dataset.
+    When omitted, the conventional `<root>/omnidocbench/omnidocbench.json` is
+    auto-detected and used if present.
     """
     root = Path(root)
     if annotations_file is not None:
@@ -219,6 +226,16 @@ def load_glasbena_mladina(
         ann_path = enriched if enriched.exists() else root / "annotations.json"
     conn_path = root / "connections.json"
     coco = COCO(str(ann_path))
+
+    # Native OmniDocBench GT (optional): explicit path, else the conventional
+    # location. Used verbatim by the runner when present.
+    if omnidocbench_file is not None:
+        odb_path = Path(omnidocbench_file)
+        if not odb_path.is_absolute():
+            odb_path = root / odb_path
+    else:
+        odb_path = root / "omnidocbench" / "omnidocbench.json"
+    odb_path = odb_path if odb_path.exists() else None
 
     connections = []
     if conn_path.exists():
@@ -273,6 +290,7 @@ def load_glasbena_mladina(
         samples=samples,
         ground_markdown=ground_md,
         coco_path=ann_path,
+        omnidocbench_path=odb_path,
     )
 
 
