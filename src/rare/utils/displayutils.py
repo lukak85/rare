@@ -14,6 +14,14 @@ COLOR_MAP = {
     "Header": "orange",
 }
 
+PUBLAYNET_COLOR_MAP = {
+    "text": "#AB59F7",
+    "title": "#0D9E38",
+    "list": "#DE5492",
+    "table": "#0D38D4",
+    "figure": "#69C0FF",
+}
+
 DOCLAYNET_COLOR_MAP = {
     "Caption": "red",
     "Footnote": "blue",
@@ -97,8 +105,7 @@ def draw_layout(
     img,
     layout,
     save_path=None,
-    has_score=False,
-    color_map=GLASANA_COLOR_MAP,
+    color_map=None,
     order=None,
     order_color="blue",
     order_line_width=2,
@@ -109,6 +116,7 @@ def draw_layout(
         img: Image (numpy array, BGR or RGB).
         layout: A layoutparser Layout with TextBlocks.
         save_path: Optional path to save the figure.
+        color_map: Color map to use for drawing boxes.
         order: Optional reading order. A list of layout indices (ints).
         order_color: Line/number color for the reading-order overlay.
         order_line_width: Line width for the reading-order overlay.
@@ -116,7 +124,8 @@ def draw_layout(
 
     viz = lp.draw_box(
         img,
-        [b.set(id=f"{b.score:.2f}/{b.type}" if has_score else f"{b.type}") for b in layout],
+        [b.set(id=f"{b.score:.2f}/{b.type}" if b.score else f"{b.type}") for b in layout],
+        box_width=2,
         color_map=color_map,
         show_element_id=True,
         id_font_size=10,
@@ -189,7 +198,7 @@ def draw_pil_image(img, save_path=None):
 
     plt.imshow(img)
     if save_path:
-        plt.savefig(save_path)
+        plt.savefig(save_path, dpi=300)
     plt.show()
     plt.close()
 

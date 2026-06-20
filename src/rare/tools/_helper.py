@@ -14,11 +14,13 @@ from layoutparser.visualization import draw_text
 from rare.utils.displayutils import *
 from rare.utils.fileutils import save_coco_to_json, read_json
 
-from ..utils.displayutils import D4LA_COLOR_MAP, GLASANA_COLOR_MAP
+from ..utils.displayutils import D4LA_COLOR_MAP, GLASANA_COLOR_MAP, PUBLAYNET_COLOR_MAP
+
 COLOR_MAP_DATASETS = {
     "D4LA": D4LA_COLOR_MAP,
     "DocLayNet": DOCLAYNET_COLOR_MAP,
-    "GLASANA": GLASANA_COLOR_MAP
+    "PubLayNet": PUBLAYNET_COLOR_MAP,
+    "GlasbenaMladina": GLASANA_COLOR_MAP
 }
 
 IMAGES_ROOT = "datasets/glasbena_mladina/images"
