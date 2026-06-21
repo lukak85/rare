@@ -237,7 +237,8 @@ def run_pipeline(
                 result_dir=odb_dir / f"results_{model_name}",
                 image=omnidocbench_image or DEFAULT_LAYOUT_IMAGE,
                 type='detection',
-                omnidocbench_pred_cat_mapping=layout.OMNIDOCBENCH_PRED_CAT_MAPPING
+                gt_cat_mapping=_convert_to_string(gt_category_map),
+                pred_cat_mapping=_convert_to_string(pred_category_map)
             )
             aggregates.update(odb_metrics)
 
@@ -346,6 +347,23 @@ def run_vlm(
     )
     _regenerate_report(run_dir, track="vlm", dataset_name=dataset.name)
     return aggregates
+
+def _convert_to_string(mapping: dict[str, str]):
+    """
+    Takes in a dictionary of class mappings and outputs a YAML-ready string.
+
+    Args:
+        mapping: dictionary of class mappings
+
+    Returns:
+        string: YAML-ready string
+    """
+    yaml_str = ""
+    for key, value in mapping.items():
+        yaml_str += f"""
+        {key}: {value}\n
+        """
+    return yaml_str
 
 
 def _run_vlm_omnidocbench(

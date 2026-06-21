@@ -57,7 +57,19 @@ def _build_config_yaml() -> str:
     timeout_fallback_order_penalty: 0.10
 """
 
-def _build_config_layout_yaml(pred_cat_mapping: Optional[str] = """\
+def _build_config_layout_yaml(gt_cat_mapping: Optional[str] = """\
+                              figure_footnote: figure_footnote
+                              figure_caption: figure_caption
+                              page_number: abandon
+                              header: abandon
+                              page_footnote: abandon
+                              refernece: text
+                              figure: figure
+                              title: title
+                              text_block: text
+                              footer: abandon  
+                              """,
+                              pred_cat_mapping: Optional[str] = """\
                               title : title
                               plain text: text
                               abandon: abandon
@@ -86,16 +98,7 @@ def _build_config_layout_yaml(pred_cat_mapping: Optional[str] = """\
         - figure             # Image
         - figure_caption     # Image caption
     gt_cat_mapping:          # Mapping table from ground truth to final evaluation categories, key is ground truth category, value is final evaluation category name
-      figure_footnote: figure_footnote
-      figure_caption: figure_caption
-      page_number: abandon
-      header: abandon
-      page_footnote: abandon
-      refernece: text
-      figure: figure
-      title: title
-      text_block: text
-      footer: abandon
+      f{gt_cat_mapping}
     pred_cat_mapping:       # Mapping table from prediction to final evaluation categories, key is prediction category, value is final evaluation category name
       f{pred_cat_mapping}
 """
@@ -107,13 +110,17 @@ def _docker_command(
     result_dir: Path,
     image: str,
     type: str='end2end',
-    omnidocbench_pred_cat_mapping: Optional[str] = None,
+    gt_cat_mapping: Optional[str] = None,
+    pred_cat_mapping: Optional[str] = None,
 ) -> list[str]:
     """Assemble the `docker run ... bash -c <heredoc>` invocation from run.sh."""
     if type == 'end2end':
         config_yaml = _build_config_yaml()
     else:
-        config_yaml = _build_config_layout_yaml(omnidocbench_pred_cat_mapping)
+        config_yaml = _build_config_layout_yaml(
+            gt_cat_mapping=gt_cat_mapping,
+            pred_cat_mapping=pred_cat_mapping
+        )
     # Same shape as run.sh: write the config inside the container, then run the
     # validator. The heredoc keeps us from needing an extra host file + mount.
     inner = (
@@ -180,7 +187,8 @@ def run_eval(
     image: str = DEFAULT_IMAGE,
     timeout: Optional[int] = None,
     type: str='end2end',
-    omnidocbench_pred_cat_mapping: str=None,
+    gt_cat_mapping: str=None,
+    pred_cat_mapping: str=None,
 ) -> dict[str, float]:
     """Run the OmniDocBench container and return parsed Edit-distance metrics.
 
@@ -197,7 +205,8 @@ def run_eval(
     result_dir.mkdir(parents=True, exist_ok=True)
     result_dir = result_dir.resolve()
 
-    cmd = _docker_command(gt_path, pred_md_dir, result_dir, image, type=type, omnidocbench_pred_cat_mapping=omnidocbench_pred_cat_mapping)
+    cmd = _docker_command(gt_path, pred_md_dir, result_dir, image, type=type,
+                          gt_cat_mapping=gt_cat_mapping, pred_cat_mapping=pred_cat_mapping)
     print(f"[omnidocbench] running container {image} ...")
     try:
         proc = subprocess.run(cmd, timeout=timeout)
