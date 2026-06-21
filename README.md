@@ -516,6 +516,20 @@ manually annotated Glasbena Mladina magazines.
 | LayoutLMv3     | TODO     | TODO            |
 | DocLayout-YOLO | TODO     | TODO            |
 
+<details>
+<summary><b>Manual evaluation</b></summary>
+
+Results were obtained using this repo's own implementations for evaluations:
+
+| Model          | Backbone | Dataset   | mAP / mAP50 / mAP70      | Class agnostic mAP / mAP50 / mAP70 |
+|----------------|----------|-----------|--------------------------|------------------------------------|
+| DiT            |          | TODO      | TODO                     |                                    |
+| DocLayout-YOLO |          | TODO      | TODO                     |                                    |
+| LayoutLMv3     |          | TODO      | TODO                     |                                    |
+| PP-DocLayoutV3 | /        | /         | TODO                     | TODO                               |
+| RF-DETR        | /        | DocLayNet | 0.3422 / 0.4064 / 0.3678 | 0.4910 / 0.6244 / 0.53606          |
+</details>
+
 ## Reading Order
 
 | Model                     | Backbone | mAP/mAP50/mAP70 |
@@ -541,6 +555,9 @@ _TODO_
 # TODO
 
 Top priority:
+- [x] Add mappings from other datasets (PubLayNet, DocBank, DocLayNet) to OmniDocBench schema for evaluation
+- [x] Add OmniDocBench evaluation support for pipeline track
+  - [ ] Fix classes and other issues in OmniDocBench layout evaluation
 - [X] Add specialized VLM support:
   - [ ] Marker
 - [ ] Add general VLM support, among others:
@@ -548,10 +565,7 @@ Top priority:
   - [ ] Gemini Pro 3.1
   - [ ] Anthropic Claude Fable 5 / Opus 4.8
   - [ ] DeepSeek V3
-- [x] Add OmniDocBench evaluation support for pipeline track
-  - [ ] Fix classes and other issues in OmniDocBench layout evaluation
 - [ ] Evaluate all pipeline and VLM models
-- [ ] Add mappings from other datasets (PubLayNet, DocBank, DocLayNet) to GlasanaDocument schema for evaluation
 
 Lower priority:
 - [ ] Add support for Paragraph2Graph, M2Doc
