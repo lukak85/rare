@@ -217,7 +217,8 @@ def coco_page_to_omnidocbench(
     layout_dets: list[dict] = []
     for ann in annotations:
         src_name = name_by_id.get(ann["category_id"], "")
-        category_type = _resolve_category(src_name, cmap) if src_name else UNKNOWN_FALLBACK
+        # category_type = _resolve_category(src_name, cmap) if src_name else UNKNOWN_FALLBACK
+        category_type = src_name # TODO: For now, keep the category name from the original dataset and do the mapping in YAML
         order = ann.get("order_id")
         anno_id = int(ann["id"])
         poly = _bbox_to_poly(ann["bbox"])
@@ -350,42 +351,41 @@ def coco_to_detection_prediction(
 
 def merge_prediction_pages(
     per_image_dicts: Iterable[dict],
-    category_map: Optional[dict[str, str]] = None,
-    text_stub: bool = False,
-    text_source: Optional[TextSource] = None,
-) -> list[dict]:
+    label_map: dict[int, str],
+    default_score: float = 1.0,
+) -> dict:
     """Concatenate per-image COCO prediction dicts (as emitted by
-    `rare.utils.conversionutils.layout_parser_to_coco`) into the same flat
-    list shape as `coco_to_omnidocbench`. Each input dict carries exactly one
-    image; we run it through `coco_to_omnidocbench` and concatenate the
-    one-element results.
+    `rare.utils.conversionutils.layout_parser_to_coco`) into OmniDocBench's
+    `detection_dataset_simple_format` prediction JSON::
+
+        {"results": [{"image_name", "bbox", "category_id", "score"}, ...],
+         "categories": {"<id>": "<source name>", ...}}
+
+    Each annotation keeps its *original* COCO `category_id` (which indexes
+    `label_map`), and `categories` is `label_map` verbatim. This mirrors the GT
+    converter (which keeps source category names and defers all taxonomy
+    mapping to the YAML `pred_cat_mapping`/`gt_cat_mapping`), so a single
+    `categories` dict stays consistent across every page.
+
+    Routing through the per-page re-indexing of `coco_to_detection_prediction`
+    is wrong here: it renumbers ids per page from the sorted distinct types on
+    that page, which neither matches `label_map` nor stays stable across pages.
     """
-    pages: dict = {"categories": {}, "results": []}
+    results: list[dict] = []
     for doc in per_image_dicts:
-        """
-        pages.extend(coco_to_omnidocbench(
-            doc, category_map, text_stub=text_stub, text_source=text_source,
-        ))
-        """
-        """
-        pages.extend(coco_to_detection_prediction(
-            doc, category_map, default_score=1.0, # TODO: add score
-        ))
-        """
-        page = coco_to_detection_prediction(
-            doc, category_map, default_score=1.0,  # TODO: add score
-        )
-        pages["results"].extend(page["results"])
-        # pages["categories"].update(page["categories"])
-        # TODO: temporary fix, change
-        pages["categories"] = {
-            "0": "title",
-            "1": "plain text",
-            "2": "abandon",
-            "3": "figure",
-            "4": "figure_caption",
-        }
-    return pages
+        file_by_image = {img["id"]: img["file_name"]
+                         for img in doc.get("images", [])}
+        for ann in doc.get("annotations", []):
+            results.append({
+                "image_name":  _detection_image_name(file_by_image[ann["image_id"]]),
+                "bbox":        _bbox_to_xyxy(ann["bbox"]),
+                "category_id": ann["category_id"],
+                "score":       float(ann.get("score", default_score)),
+            })
+    return {
+        "results": results,
+        "categories": {str(k): v for k, v in label_map.items()},
+    }
 
 
 # ---------------------------------------------------------------------------

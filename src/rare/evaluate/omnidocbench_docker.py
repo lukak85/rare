@@ -93,34 +93,46 @@ def _build_config_layout_yaml(gt_cat_mapping: Optional[str] = """\
     eval_cat:                # Categories participating in final evaluation
       block_level:           # Block level categories, see OmniDocBench evaluation set introduction for details
         - title              # Title
-        - text               # Text
+        - text               # Text$1
         - abandon            # Includes headers, footers, page numbers, and page annotations
         - figure             # Image
         - figure_caption     # Image caption
-    gt_cat_mapping:          # Mapping table from ground truth to final evaluation categories, key is ground truth category, value is final evaluation category name
-      f{gt_cat_mapping}
-    pred_cat_mapping:       # Mapping table from prediction to final evaluation categories, key is prediction category, value is final evaluation category name
-      f{pred_cat_mapping}
+    gt_cat_mapping:          # Mapping table from ground truth to final evaluation categories, key is ground truth category, value is final evaluation category name{gt_cat_mapping}
+    pred_cat_mapping:       # Mapping table from prediction to final evaluation categories, key is prediction category, value is final evaluation category name{pred_cat_mapping}
 """
 
 
 def _docker_command(
     gt_path: Path,
-    pred_md_dir: Path,
-    result_dir: Path,
-    image: str,
-    type: str='end2end',
+    pred_path: Path=None,
+    pred_md_dir: Path=None,
+    result_dir: Path=None,
+    image: str=None,
+    evaluation_type: str='end2end',
     gt_cat_mapping: Optional[str] = None,
     pred_cat_mapping: Optional[str] = None,
 ) -> list[str]:
     """Assemble the `docker run ... bash -c <heredoc>` invocation from run.sh."""
-    if type == 'end2end':
+    if (pred_path and pred_md_dir) or (not pred_path and not pred_md_dir):
+        raise ValueError("Exactly one of pred_path and pred_md_dir should be provided.")
+
+    if evaluation_type == 'end2end':
         config_yaml = _build_config_yaml()
+        mounts = [
+            "-v", f"{gt_path}:/workspace/gt/your_gt.json:ro",
+            "-v", f"{pred_md_dir}:/workspace/data_md/predictions:ro",
+            "-v", f"{result_dir}:/workspace/result",
+        ]
     else:
         config_yaml = _build_config_layout_yaml(
             gt_cat_mapping=gt_cat_mapping,
             pred_cat_mapping=pred_cat_mapping
         )
+        mounts = [
+            "-v", f"{gt_path}:/workspace/demo_data/omnidocbench_demo/OmniDocBench_demo.json:ro",
+            "-v", f"{pred_path}:/workspace/demo_data/detection/detection_prediction.json:ro",
+        ]
+
     # Same shape as run.sh: write the config inside the container, then run the
     # validator. The heredoc keeps us from needing an extra host file + mount.
     inner = (
@@ -132,9 +144,7 @@ def _docker_command(
     return [
         "docker", "run", "--rm",
         "--entrypoint", "bash",
-        "-v", f"{gt_path}:/workspace/gt/your_gt.json:ro",
-        "-v", f"{pred_md_dir}:/workspace/data_md/predictions:ro",
-        "-v", f"{result_dir}:/workspace/result",
+        *mounts,
         image,
         "-c", inner,
     ]
@@ -182,11 +192,12 @@ omnidocbench_pred_cat_mapping
 
 def run_eval(
     gt_path: Path,
-    pred_md_dir: Path,
-    result_dir: Path,
-    image: str = DEFAULT_IMAGE,
+    pred_path: Path=None,
+    pred_md_dir: Path=None,
+    result_dir: Path=None,
+    docker_image: str = DEFAULT_IMAGE,
     timeout: Optional[int] = None,
-    type: str='end2end',
+    evaluation_type: str='end2end',
     gt_cat_mapping: str=None,
     pred_cat_mapping: str=None,
 ) -> dict[str, float]:
@@ -201,13 +212,17 @@ def run_eval(
         return {}
 
     gt_path = gt_path.resolve()
-    pred_md_dir = pred_md_dir.resolve()
+    pred_md_dir = pred_md_dir.resolve() if pred_md_dir else None
+    pred_path = pred_path.resolve() if pred_path else None
     result_dir.mkdir(parents=True, exist_ok=True)
     result_dir = result_dir.resolve()
 
-    cmd = _docker_command(gt_path, pred_md_dir, result_dir, image, type=type,
+    if not docker_image:
+        docker_image = DEFAULT_IMAGE if evaluation_type == 'end2end' else DEFAULT_LAYOUT_IMAGE
+
+    cmd = _docker_command(gt_path, pred_path, pred_md_dir, result_dir, docker_image, evaluation_type=evaluation_type,
                           gt_cat_mapping=gt_cat_mapping, pred_cat_mapping=pred_cat_mapping)
-    print(f"[omnidocbench] running container {image} ...")
+    print(f"[omnidocbench] running container {docker_image} ...")
     try:
         proc = subprocess.run(cmd, timeout=timeout)
     except (subprocess.TimeoutExpired, OSError) as exc:

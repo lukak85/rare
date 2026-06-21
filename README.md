@@ -557,7 +557,7 @@ _TODO_
 Top priority:
 - [x] Add mappings from other datasets (PubLayNet, DocBank, DocLayNet) to OmniDocBench schema for evaluation
 - [x] Add OmniDocBench evaluation support for pipeline track
-  - [ ] Fix classes and other issues in OmniDocBench layout evaluation
+  - [x] Fix classes and other issues in OmniDocBench layout evaluation
 - [X] Add specialized VLM support:
   - [ ] Marker
 - [ ] Add general VLM support, among others:

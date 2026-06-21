@@ -160,7 +160,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         images_dir = Path(args.images_dir) if args.images_dir else None
         category_map = load_category_map(args.category_map) if args.category_map else None
         pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else None
-        emit_omnidocbench = args.emit_omnidocbench or args.run_omnidocbench
+        emit_omnidocbench = args.emit_omnidocbench
         agg = run_pipeline(
             dataset, layout, order, run_dir,
             limit=args.limit,
@@ -169,6 +169,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             pdfs_dir=pdfs_dir,
             run_omnidocbench=args.run_omnidocbench,
             omnidocbench_image=args.omnidocbench_image,
+            omnidocbench_ground=args.omnidocbench_ground
         )
 
     elif args.track == "vlm":
@@ -335,11 +336,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--run-omnidocbench",
         dest="run_omnidocbench",
         action="store_true",
-        help="After emitting OmniDocBench artifacts, run the pinned OmniDocBench "
-             "Docker container on them and fold the text_block / reading_order "
-             "Edit-distance into report.md. Requires Docker. On the pipeline track "
-             "this implies --emit-omnidocbench; on the VLM track it requires a "
-             "resolvable --pdfs-dir for real-text ground truth.",
+        default=True,
+        help="Evaluate using OmniDocBench.",
+    )
+    p_eval.add_argument(
+        "--omnidocbench-ground",
+        help="OmniDocBench ground truths file.",
+    )
+    p_eval.add_argument(
+        "--run-manual",
+        dest="run_omnidocbench",
+        action="store_false",
+        help="Manual evaluation.",
     )
     p_eval.add_argument(
         "--omnidocbench-image",

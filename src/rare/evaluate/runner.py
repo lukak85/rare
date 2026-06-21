@@ -93,6 +93,7 @@ def run_pipeline(
     pdfs_dir: Optional[Path] = None,
     run_omnidocbench: bool = False,
     omnidocbench_image: Optional[str] = None,
+    omnidocbench_ground: Optional[Path] = None,
 ) -> dict:
     """Run one (layout, order) combo over `dataset`, write per-model results.
 
@@ -142,24 +143,26 @@ def run_pipeline(
             pdf_stem=sample.pdf_stem,
         )
 
-        row: dict = {
-            "model":         model_name,
-            "image_id":      sample.image_id,
-            "pdf_stem":      sample.pdf_stem,
-            "page_no":       sample.page_no,
-            "file_name":     sample.image_path.name,
-            "predicted_order": list(predicted_order),
-        }
-        row.update(score_layout(
-            predicted, sample.ground_layout,
-            pred_category_map=pred_category_map,
-            gt_category_map=gt_category_map,
-        ))
-        if sample.ground_order is not None:
-            row.update(score_order(
-                predicted, predicted_order, sample.ground_layout, sample.ground_order
+        if not run_omnidocbench:
+            row: dict = {
+                "model":         model_name,
+                "image_id":      sample.image_id,
+                "pdf_stem":      sample.pdf_stem,
+                "page_no":       sample.page_no,
+                "file_name":     sample.image_path.name,
+                "predicted_order": list(predicted_order),
+            }
+
+            row.update(score_layout(
+                predicted, sample.ground_layout,
+                pred_category_map=pred_category_map,
+                gt_category_map=gt_category_map,
             ))
-        per_image.append(row)
+            if sample.ground_order is not None:
+                row.update(score_order(
+                    predicted, predicted_order, sample.ground_layout, sample.ground_order
+                ))
+            per_image.append(row)
 
         if save_coco:
             categories = layout.label_map
@@ -174,12 +177,17 @@ def run_pipeline(
                 predicted_order=predicted_order,
             ))
 
-    aggregates = pipeline_aggregate(per_image)
+    if not run_omnidocbench:
+        aggregates = pipeline_aggregate(per_image)
+
     if save_coco and coco_predictions:
         coco_dir = run_dir / "per_model" / f"{model_name}_coco"
         coco_dir.mkdir(parents=True, exist_ok=True)
         for sample, payload in zip(samples, coco_predictions):
             save_coco_to_json(payload, str(coco_dir / f"{sample.image_id}.json"))
+
+    gt_path: Optional[Path] = None
+    markdown_dir: Optional[Path] = None
 
     if emit_omnidocbench:
         from rare.evaluate.pdf_text import PdfTextSource
@@ -196,51 +204,69 @@ def run_pipeline(
             pdf_text_source = PdfTextSource(pdf_root)
         use_stub = pdf_text_source is None
 
-        gt_path: Optional[Path] = None
-        markdown_dir: Optional[Path] = None
+        omnidocbench_ground, _ = _write_omnidocbench_gt(
+            dataset, odb_dir, category_map,
+            text_stub=use_stub, text_source=pdf_text_source,
+        )
+
+        """
         try:
-            if False: # TODO: add back
-                gt_path, gt_pages = _write_omnidocbench_gt(
-                    dataset, odb_dir, category_map,
-                    text_stub=use_stub, text_source=pdf_text_source,
-                )
+            gt_path, gt_pages = _write_omnidocbench_gt(
+                dataset, odb_dir, category_map,
+                # text_stub=use_stub, text_source=pdf_text_source,
+            )
             # Predictions: one combined JSON per model. With real PDF text
             # each pred box's own crop is queried; the IoU-to-GT relabel is
             # only needed in stub mode (where tokens must match exactly).
             if coco_predictions:
-                pred_pages = merge_prediction_pages(
-                    coco_predictions, category_map,
-                    text_stub=use_stub, text_source=pdf_text_source,
-                )
+                # pred_pages = merge_prediction_pages(
+                #     coco_predictions, pred_category_map,
+                #     text_stub=use_stub, text_source=pdf_text_source,
+                # )
                 # if use_stub and gt_pages:
                 #     relabel_predictions_to_gt(pred_pages, gt_pages)
                 (odb_dir / f"{model_name}_pred.json").write_text(
                     json.dumps(pred_pages, indent=2)
                 )
                 # Per-page markdown for OmniDocBench's `data_md/predictions` mount.
-                markdown_dir = odb_dir / f"markdown_pred_{model_name}"
+                # markdown_dir = odb_dir / f"markdown_pred_{model_name}"
                 # emit_stub_markdown(pred_pages, markdown_dir) # TODO: currently out of scope for pipeline track
         finally:
             if pdf_text_source is not None:
                 pdf_text_source.close()
+        """
 
-        # Approach C: run OmniDocBench's pinned container against the artifacts
-        # we just emitted, and fold the Edit-distance numbers into `aggregates`
-        # so they appear as columns in report.md. Per-model result dir keeps
-        # accumulated models from clobbering each other's `predictions_*` files.
-        if run_omnidocbench and gt_path is not None and markdown_dir is not None:
-            from rare.evaluate.omnidocbench_docker import run_eval, DEFAULT_LAYOUT_IMAGE
+    # Run OmniDocBench's container against the artifacts
+    if run_omnidocbench and omnidocbench_ground is not None:
+        from rare.evaluate.omnidocbench_docker import run_eval
+
+        # Save prediction to OmniDocBench layout evaluation compliant format
+        odb_dir = run_dir / "omnidocbench_layout"
+        odb_dir.mkdir(parents=True, exist_ok=True)
+
+        # Predictions: one combined JSON per model.
+        if coco_predictions:
+            pred_pages = merge_prediction_pages(
+                coco_predictions,
+                layout.label_map,
+                # text_stub=use_stub
+            )
+            odb_path = odb_dir / f"{model_name}_odb.json"
+            odb_path.write_text(
+                json.dumps(pred_pages, indent=2)
+            )
 
             odb_metrics = run_eval(
-                gt_path=gt_path,
-                pred_md_dir=markdown_dir,
+                gt_path=Path(omnidocbench_ground),
+                pred_path=odb_path,
+                # pred_md_dir=markdown_dir, # TODO: potentially add later for edit distance calculation
                 result_dir=odb_dir / f"results_{model_name}",
-                image=omnidocbench_image or DEFAULT_LAYOUT_IMAGE,
-                type='detection',
+                docker_image=omnidocbench_image,
+                evaluation_type='detection',
                 gt_cat_mapping=_convert_to_string(gt_category_map),
                 pred_cat_mapping=_convert_to_string(pred_category_map)
             )
-            aggregates.update(odb_metrics)
+            aggregates = odb_metrics
 
     _write_per_model(
         run_dir=run_dir,
@@ -361,8 +387,7 @@ def _convert_to_string(mapping: dict[str, str]):
     yaml_str = ""
     for key, value in mapping.items():
         yaml_str += f"""
-        {key}: {value}\n
-        """
+      {key}: {value}"""
     return yaml_str
 
 
