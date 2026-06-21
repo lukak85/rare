@@ -31,8 +31,9 @@ _DEFERRED: dict[str, dict[str, str]] = {
         "layoutlmv3":      "rare.models.layout.layoutlmv3",
         "vgt":             "rare.models.layout.vgt",
         "swindocseg":      "rare.models.layout.swindocseg",
-        # YOLO / DETR family
+        # YOLO family
         "doclayout-yolo":  "rare.models.layout.doclayout_yolo",
+        # DETR family
         "rf-detr":         "rare.models.layout.rfdetr",
         # Paddle family
         "ppyolo":          "rare.models.layout.paddle_models",
