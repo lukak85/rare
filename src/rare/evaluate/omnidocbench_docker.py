@@ -214,8 +214,10 @@ def run_eval(
     gt_path = gt_path.resolve()
     pred_md_dir = pred_md_dir.resolve() if pred_md_dir else None
     pred_path = pred_path.resolve() if pred_path else None
-    result_dir.mkdir(parents=True, exist_ok=True)
-    result_dir = result_dir.resolve()
+
+    if result_dir:
+        result_dir.mkdir(parents=True, exist_ok=True)
+        result_dir = result_dir.resolve()
 
     if not docker_image:
         docker_image = DEFAULT_IMAGE if evaluation_type == 'end2end' else DEFAULT_LAYOUT_IMAGE
@@ -232,10 +234,12 @@ def run_eval(
         print(f"[omnidocbench] container exited with code {proc.returncode}; "
               f"see output above. Skipping metric merge.")
         return {}
-
+    """ TODO: add back
     metrics = parse_metric_result(result_dir)
     if not metrics:
         print(f"[omnidocbench] no parseable metrics in {result_dir}.")
     else:
         print(f"[omnidocbench] {metrics}")
     return metrics
+    """
+    return {}

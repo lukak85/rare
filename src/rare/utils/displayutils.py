@@ -37,9 +37,9 @@ DOCLAYNET_COLOR_MAP = {
 }
 
 D4LA_COLOR_MAP = {
-    "DocTitle": "red",
-    "ParaTitle": "blue",
-    "ParaText": "green",
+    "DocTitle": "#9EA3FF",
+    "ParaTitle": "#0D9E38",
+    "ParaText": "#AB59F7",
     "ListText": "purple",
     "RegionTitle": "pink",
     "Date": "orange",
@@ -54,8 +54,8 @@ D4LA_COLOR_MAP = {
     "Author": "cyan",
     "TableName": "blue",
     "Table": "blue",
-    "Figure": "blue",
-    "FigureName": "blue",
+    "Figure": "#69C0FF",
+    "FigureName": "#008BAD",
     "Equation": "blue",
     "Reference": "blue",
     "Footer": "orange",

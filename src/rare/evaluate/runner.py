@@ -186,6 +186,42 @@ def run_pipeline(
         for sample, payload in zip(samples, coco_predictions):
             save_coco_to_json(payload, str(coco_dir / f"{sample.image_id}.json"))
 
+        # TODO: do this below nicer (at the moment it's a copy of tools' `join_annotations`
+        # Join annotations in a single COCO file
+        coco_anns_list = []
+        coco_imgs_list = []
+        coco_cats = None
+        annotation_id = 1
+
+        import os
+        from pycocotools.coco import COCO
+
+        for filename in os.listdir(coco_dir):
+            if not filename.endswith(".json"):
+                continue
+
+            coco = COCO(os.path.join(coco_dir, filename))
+            coco_anns = coco.loadAnns(coco.getAnnIds())
+
+            # Reassign annotation IDs to avoid collisions
+            for ann in coco_anns:
+                ann["id"] = annotation_id
+                annotation_id += 1
+
+            coco_anns_list.extend(coco_anns)
+            coco_imgs_list.extend(coco.loadImgs(coco.getImgIds()))
+
+            if coco_cats is None:
+                coco_cats = coco.cats
+
+        coco_joined_data = {
+            "images": coco_imgs_list,
+            "annotations": coco_anns_list,
+            "categories": [coco_cats[cid] for cid in coco_cats],
+        }
+
+        save_coco_to_json(coco_joined_data, str(run_dir / "per_model" / f"{model_name}_coco.json"))
+
     gt_path: Optional[Path] = None
     markdown_dir: Optional[Path] = None
 
@@ -260,7 +296,7 @@ def run_pipeline(
                 gt_path=Path(omnidocbench_ground),
                 pred_path=odb_path,
                 # pred_md_dir=markdown_dir, # TODO: potentially add later for edit distance calculation
-                result_dir=odb_dir / f"results_{model_name}",
+                # result_dir=odb_dir / f"results_{model_name}", # TODO: add back later if needed
                 docker_image=omnidocbench_image,
                 evaluation_type='detection',
                 gt_cat_mapping=_convert_to_string(gt_category_map),
