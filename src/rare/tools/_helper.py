@@ -4,13 +4,13 @@ import json
 import os
 import re
 import shutil
+from pathlib import Path
 
 import cv2
 from pycocotools.coco import COCO
 
 from typing import List, Optional
 
-from layoutparser.visualization import draw_text
 from rare.utils.displayutils import *
 from rare.utils.fileutils import save_coco_to_json, read_json
 
@@ -44,6 +44,7 @@ def load_coco_annotations(annotations, categories=None):
         categories: Optional COCO categories dict. If provided, resolves
                     category IDs to human-readable names.
     """
+    import layoutparser as lp
     layout = lp.Layout()
 
     for ann in annotations:
@@ -457,6 +458,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Path to the JSON annotation file including connections",
         type=str,
     )
+    parser.add_argument("--config", help="JSON config file for the chosen backend.")
     parser.add_argument(
         "-d", "--dataset",
         help="Dataset type (e.g., Glasana, PubLayNet, D4LA)",
@@ -475,7 +477,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--layout", help="Layout backend (pipeline track).")
     parser.add_argument(
         "-m", "--mode",
-        help="Action: join-annotations, prepare-annotations, order-images, "
+        help="Action: join-annotations, run-detection, prepare-annotations, order-images, "
              "remove-scores, review-annotations, count-annotations, text-extraction, "
              "collect-pdfs, lookup-pdf, evaluate-layout or visualize (default)",
         type=str,
@@ -499,6 +501,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "-s", "--save-visualization",
         help="Path to save the annotation visualization",
+        type=str,
+    )
+    parser.add_argument(
+        "--stem",
+        help="Stem of image filename (for run-detection)",
         type=str,
     )
     parser.add_argument(
@@ -697,6 +704,78 @@ def main(argv: Optional[List[str]] = None) -> int:
         results = score_layout(layout, layout_compare, pred_category_map=pred_category_map, gt_category_map=gt_category_map)
 
         print(results)
+
+    elif args.mode == "run-detection":
+        if not args.path or not args.stem:
+            print("Please provide a path and stem of the image filename to run detection on.")
+            return 1
+        if not args.layout:
+            print("Please provide a layout backend.")
+            return 1
+        if not args.output_path:
+            print("Please provide an output path to save the COCO predictions.")
+            return 1
+
+        from rare.models.registry import ensure_layoutparser_backend, get
+        from rare.utils.conversionutils import layout_parser_to_coco
+
+        ensure_layoutparser_backend(args.layout)
+
+        def _read_config(path):
+            if path is None:
+                return None
+            return json.loads(Path(path).read_text())
+
+        layout_cls = get("layout", args.layout)
+        layout = layout_cls(config=_read_config(args.config))
+        order_cls = get("order", "paddlex-xy-cut")
+        order = order_cls()
+
+        # Get all images that start with stem
+        folder = Path(args.path)
+        files = list(folder.glob(f"{args.stem}*"))
+
+        coco_predictions: list[dict] = []
+
+        def _open_image(path):
+            from PIL import Image
+            return Image.open(path)
+
+        idx = 0
+        for image_path in files:
+            image = _open_image(image_path)
+            predicted = layout.detect(image_path)
+            predicted_order = order.order(
+                predicted,
+                image=image,
+            )
+
+            import numpy as np
+            from PIL import Image
+            image_pil = Image.open(image_path)
+            height, width = np.asarray(image_pil).shape[:2]
+
+            categories = layout.label_map
+            image_info = {
+                "id": idx,
+                "file_name": image_path.name,
+                "width": width,
+                "height": height,
+            }
+            coco_predictions.append(layout_parser_to_coco(
+                predicted, image_info, categories,
+                predicted_order=predicted_order,
+            ))
+
+            idx += 1
+
+        coco_dir = Path(args.output_path) / "per_page"
+        coco_dir.mkdir(parents=True, exist_ok=True)
+        for prediction in coco_predictions:
+            save_coco_to_json(prediction, str(coco_dir / f"{prediction['images'][0]['id']}.json"))
+
+        coco_data = join_annotations(coco_dir)
+        save_coco_to_json(coco_data, f"{args.output_path}/output.json")
 
     elif args.mode == "text-extraction":
         if not args.annotations_file:

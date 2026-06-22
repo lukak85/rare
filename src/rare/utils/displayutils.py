@@ -1,7 +1,6 @@
 """Visualization utilities for displaying document layouts."""
 
 import cv2
-import layoutparser as lp
 import numpy as np
 
 # Color maps for layoutparser's draw_box function
@@ -121,6 +120,7 @@ def draw_layout(
         order_color: Line/number color for the reading-order overlay.
         order_line_width: Line width for the reading-order overlay.
     """
+    import layoutparser as lp
 
     viz = lp.draw_box(
         img,
@@ -147,6 +147,7 @@ def draw_text(
         img: Image (numpy array, BGR or RGB).
         layout: A layoutparser Layout with TextBlocks.
     """
+    import layoutparser as lp
 
     print()
     viz = lp.draw_text(
