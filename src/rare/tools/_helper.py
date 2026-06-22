@@ -68,12 +68,18 @@ def load_coco_annotations(annotations, categories=None):
 def join_annotations(path):
     """Read all JSON annotation files in a folder and merge them.
 
-    Reassigns annotation IDs sequentially to avoid conflicts across files.
+    Reassigns annotation and image IDs sequentially to avoid conflicts across
+    files. Images that share a ``file_name`` across files are merged into a
+    single entry so their annotations point at the same image.
     """
     coco_anns_list = []
     coco_imgs_list = []
     coco_cats = None
     annotation_id = 1
+    image_id = 1
+    # Map a file_name to its globally-unique reassigned image id, so the same
+    # image appearing in multiple files isn't duplicated.
+    file_name_to_new_id = {}
 
     for filename in os.listdir(path):
         if not filename.endswith(".json"):
@@ -82,13 +88,28 @@ def join_annotations(path):
         coco = COCO(os.path.join(path, filename))
         coco_anns = coco.loadAnns(coco.getAnnIds())
 
-        # Reassign annotation IDs to avoid collisions
+        # Reassign image IDs to avoid collisions, deduplicating by file_name.
+        # Sort by original id first so new IDs follow the original ordering.
+        # Build a per-file map from each old image id to its new global id.
+        old_to_new_image_id = {}
+        for img in sorted(coco.loadImgs(coco.getImgIds()), key=lambda i: i["id"]):
+            old_id = img["id"]
+            new_id = file_name_to_new_id.get(img["file_name"])
+            if new_id is None:
+                new_id = image_id
+                image_id += 1
+                file_name_to_new_id[img["file_name"]] = new_id
+                img["id"] = new_id
+                coco_imgs_list.append(img)
+            old_to_new_image_id[old_id] = new_id
+
+        # Reassign annotation IDs and remap their image references.
         for ann in coco_anns:
             ann["id"] = annotation_id
             annotation_id += 1
+            ann["image_id"] = old_to_new_image_id[ann["image_id"]]
 
         coco_anns_list.extend(coco_anns)
-        coco_imgs_list.extend(coco.loadImgs(coco.getImgIds()))
 
         if coco_cats is None:
             coco_cats = coco.cats
