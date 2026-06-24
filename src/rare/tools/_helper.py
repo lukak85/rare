@@ -58,7 +58,7 @@ def load_coco_annotations(annotations, categories=None):
                     else ann["category_id"]
                 ),
                 id=ann["id"],
-                score=ann.get("score", 1),
+                score=ann.get("score", None),
             )
         )
 
@@ -81,6 +81,11 @@ def join_annotations(path):
     # image appearing in multiple files isn't duplicated.
     file_name_to_new_id = {}
 
+    def natural_key(s):
+        # split into runs of digits and non-digits, converting digit runs to int
+        return [int(part) if part.isdigit() else part
+                for part in re.split(r'(\d+)', s)]
+
     for filename in os.listdir(path):
         if not filename.endswith(".json"):
             continue
@@ -92,7 +97,7 @@ def join_annotations(path):
         # Sort by original id first so new IDs follow the original ordering.
         # Build a per-file map from each old image id to its new global id.
         old_to_new_image_id = {}
-        for img in sorted(coco.loadImgs(coco.getImgIds()), key=lambda i: i["id"]):
+        for img in sorted(coco.loadImgs(coco.getImgIds()), key=lambda item: natural_key(item['file_name'])):
             old_id = img["id"]
             new_id = file_name_to_new_id.get(img["file_name"])
             if new_id is None:
@@ -169,7 +174,7 @@ def remove_duplicates(coco, annotations_file):
     }
 
 
-def visualize_annotations(coco, image_id, connections=None, save_path=None, visualize_text=False, images_root=False, dataset="Glasna"):
+def visualize_annotations(coco, image_id, save_path=None, visualize_text=False, images_root=False, dataset="Glasna"):
     """Load and display annotations for a single image.
 
     Args:
@@ -192,11 +197,6 @@ def visualize_annotations(coco, image_id, connections=None, save_path=None, visu
         # Prefer the precomputed permutation in `order_id`; fall back to the
         # connections.json IoU match only when annotations lack order_id.
         positions = order_from_order_id(anns)
-        if positions is None and connections:
-            id_map, tgt_index = build_id_map(anns, connections, img_info["file_name"], (img_info["width"], img_info["height"]))
-            coco_id_order = [id_map[i] for i in tgt_index if i in id_map]
-            index_map = {id_: i for i, id_ in enumerate(sorted(coco_id_order))}
-            positions = [index_map[id_] for id_ in coco_id_order]
         draw_layout(display_img, layout, order=positions, save_path=save_path, color_map=COLOR_MAP_DATASETS.get(dataset))
 
 
@@ -221,7 +221,8 @@ def visualize_all_images(coco, save_path=None, skip_hashes=None, dataset="Glasna
         anns = coco.loadAnns(coco.getAnnIds([int(image_id)]))
         layout = load_coco_annotations(anns, categories=coco.cats)
         display_img = cv2.imread(img_path)
-        draw_layout(display_img, layout, save_path=save_path, color_map=COLOR_MAP_DATASETS.get(dataset))
+        positions = order_from_order_id(anns)
+        draw_layout(display_img, layout, order=positions, save_path=save_path, color_map=COLOR_MAP_DATASETS.get(dataset))
 
 def iou(b1, b2):
     # b = [x, y, w, h] in COCO convention
@@ -615,6 +616,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not args.annotations_file:
             print("Please provide an annotation file.")
             return 1
+        if not args.dataset:
+            print("Please provide dataset type (such as GlasbenaMladina, PubLayNet, D4LA).")
+            return 1
 
         # Documents already reviewed — skip these when reviewing
         already_checked = {
@@ -650,7 +654,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         coco = COCO(args.annotations_file)
         visualize_all_images(
-            coco, save_path=args.save_visualization, skip_hashes=already_checked
+            coco, save_path=args.save_visualization, skip_hashes=already_checked, dataset=args.dataset,
         )
 
     elif args.mode == "join-annotations":
@@ -880,10 +884,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
 
         coco = COCO(args.annotations_file)
-        rec = None
-        if args.connections_annotations_file:
-            rec = json.load(open(args.connections_annotations_file))
-        visualize_annotations(coco, args.image_id, connections=rec, save_path=args.save_visualization, visualize_text=args.visualize_text, images_root=args.images_root, dataset=args.dataset)
+        visualize_annotations(coco, args.image_id, save_path=args.save_visualization, visualize_text=args.visualize_text, images_root=args.images_root, dataset=args.dataset)
 
     return 0
 
