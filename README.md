@@ -27,7 +27,7 @@ pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.or
 pip install -e ".[rf-detr]" # + RF-DETR dependencies
 pip install -e ".[vgt]" # + VGT dependencies
 
-pip install -e ".[marker]" # + Docling dependencies
+pip install -e ".[marker]" # + Marker dependencies
 ```
 
 Furthermore install LayoutParser fork:
