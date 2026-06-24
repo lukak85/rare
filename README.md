@@ -24,8 +24,10 @@ pip install -e ".[faster-rcnn]" # + Faster R-CNN dependencies
 pip install -e ".[layoutlmv3]" # + LayoutLMv3 dependencies 
 pip install -e ".[mask-rcnn]" # + Mask R-CNN dependencies
 pip install -e ".[pp-doclayoutv3]" --extra-index-url https://download.pytorch.org/whl/cpu # + PP-DocLayoutV3 dependencies
+pip install -e ".[rf-detr]" # + RF-DETR dependencies
+pip install -e ".[vgt]" # + VGT dependencies
 
-pip install -e ".[docling]" # + Docling dependencies
+pip install -e ".[marker]" # + Docling dependencies
 ```
 
 Furthermore install LayoutParser fork:
@@ -179,6 +181,7 @@ The supported models (and therefore given Python version recommendations) were t
 | **[Docling](https://github.com/docling-project/docling)**  | `docling`   | Specialized VLMs | 3.14                       |
 | **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**  | `dots-ocr`  | Specialized VLMs | 3.12                       |
 | **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**          | `glm-ocr`   | Specialized VLMs | 3.13                       |
+| **[Marker](https://github.com/datalab-to/marker)**         | `marker`    | Specialized VLMs | 3.10                       |
 | **[MinerU](https://github.com/opendatalab/mineru)**        | `mineru`    | Specialized VLMs | 3.13                       |
 | **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)** | `paddleocr` | Specialized VLMs | 3.12                       |
 
@@ -421,6 +424,14 @@ pip uninstall vllm
 pip install "vllm<0.20"
 ```
 </details>
+
+
+### Marker
+
+To enable GPU inference, use torch built with CUDA. Given GPU with CUDA 12.8:
+```bash
+pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+```
 
 
 ### MinerU

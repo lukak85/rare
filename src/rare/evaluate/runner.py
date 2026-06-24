@@ -490,7 +490,7 @@ def _run_vlm_omnidocbench(
         gt_path=gt_path,
         pred_md_dir=Path(out_md_dir),
         result_dir=odb_dir / f"results_{model_name}",
-        image=omnidocbench_image or DEFAULT_IMAGE,
+        docker_image=omnidocbench_image or DEFAULT_IMAGE,
     )
 
 
