@@ -105,7 +105,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
     # Imported only after the layout backend is constructed.
     from rare.parse.pipeline import parse_pdf
 
-    out = parse_pdf(args.pdf, layout, order, output_dir=args.output, dpi=args.dpi)
+    out = parse_pdf(args.pdf, layout, order, output_dir=args.output, dpi=args.dpi, per_page=args.per_page)
     print(f"Output written to: {out}")
     return 0
 
@@ -241,6 +241,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--pdfs-dir",
         help="COCO-track: directory of source PDFs (<stem>.pdf) used to fill region "
              "text via pdfplumber. Without it, regions render with empty text.",
+    )
+    p_parse.add_argument(
+        "--per-page",
+        action="store_true",
+        help="Output Markdown in per-page format.",
     )
     p_parse.add_argument(
         "--emit-omnidocbench",

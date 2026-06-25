@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from rare.config.paths import WEIGHTS_PATH
+from rare.doc.schema import TAXONOMY_TO_GLASBENA_MLADINA
 from rare.models.registry import register
 
 
@@ -86,6 +87,14 @@ class VGTBackend:
         # "Glasana" label_map), they share the ground-truth taxonomy, so the
         # runner reuses the GT category map and this stays None.
         self.pred_category_map = PRED_CATEGORY_MAPS.get(label_map)
+        # Advertise the prediction vocabulary to the parse pipeline so it can
+        # relabel foreign labels (e.g. D4LA) into Glasbena RegionCategory values
+        # before assembly. None when predictions already speak Glasbena
+        # ("Glasana" label_map) or when no inbound map exists for the vocabulary.
+        self.source_taxonomy = (
+            label_map if isinstance(label_map, str) and label_map in TAXONOMY_TO_GLASBENA_MLADINA
+            else None
+        )
         self.label_map = self._model.label_map
 
     def detect(self, image):

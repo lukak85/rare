@@ -12,6 +12,7 @@ from rare.doc.schema import (
     Article,
     GlasanaDocument,
     PageInfo,
+    relabel_to_glasbena_mladina,
 )
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
@@ -39,17 +40,27 @@ def parse_pdf(
     order: "ReadingOrderBackend",
     output_dir: str | Path = "outputs/parsed",
     dpi: int = 200,
+    per_page: bool = False,
 ) -> Path:
     """Run layout detection, reading-order, text extraction, and assembly on a PDF.
 
     Writes `{stem}_doc.json`, `{stem}.md`, `{stem}.html`, and `figures/` to
-    `output_dir/<pdf_stem>/`. Returns the output directory.
+    `output_dir/<pdf_stem>/`. When `per_page` is True (default), also writes one
+    Markdown file per page under `pages/` as `{stem}_{page_no}.md`. Returns the
+    output directory.
+
+    If `layout` advertises a `source_taxonomy` (e.g. VGT reporting "D4LA"), each
+    detected label is translated into the Glasbena vocabulary via
+    `relabel_to_glasbena` before assembly, so foreign-trained detectors produce
+    the correct GlasanaDocument item types.
     """
     pdf_path = Path(pdf_path)
     pdf_stem = pdf_path.stem
     out_dir = Path(output_dir) / pdf_stem
     figures_dir = out_dir / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    source_taxonomy = getattr(layout, "source_taxonomy", None)
 
     doc = GlasanaDocument(source_pdf=pdf_stem)
     current_article: Article | None = None
@@ -80,7 +91,7 @@ def parse_pdf(
                 block = detected_layout[idx]
                 regions.append({
                     "region_id": str(uuid.uuid4()),
-                    "label": block.type or "Paragraph",
+                    "label": relabel_to_glasbena_mladina(block.type or "Paragraph", source_taxonomy),
                     "bbox_norm_1000": _bbox_to_norm_1000(block, img_w, img_h),
                     "score": getattr(block, "score", None),
                 })
@@ -99,4 +110,4 @@ def parse_pdf(
                 page_image=page_image,
             )
 
-    return write_outputs(doc, output_dir)
+    return write_outputs(doc, output_dir, per_page=per_page)
