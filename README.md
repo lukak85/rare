@@ -555,6 +555,7 @@ Results were obtained using this repo's own implementations for evaluations:
 | Docling   | TODO                    | TODO                     |
 | dots.ocr  | TODO                    | TODO                     |
 | GLM-OCR   | TODO                    | TODO                     |
+| Marker    | TODO                    | TODO                     |
 | MinerU    | MinerU2.5-Pro-2604-1.2B | 0.268333333              |
 | PaddleOCR | TODO                    | TODO                     |
 
@@ -570,7 +571,7 @@ Top priority:
 - [x] Add OmniDocBench evaluation support for pipeline track
   - [x] Fix classes and other issues in OmniDocBench layout evaluation
 - [X] Add specialized VLM support:
-  - [ ] Marker
+  - [x] Marker
 - [ ] Add general VLM support, among others:
   - [ ] GPT 5.5
   - [ ] Gemini Pro 3.1

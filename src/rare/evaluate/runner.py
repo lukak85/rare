@@ -324,12 +324,13 @@ def run_vlm(
     dataset: EvalDataset,
     vlm,
     run_dir: Path,
+    limit: Optional[int] = None,
     pdfs_dir: Optional[Path] = None,
     images_dir: Optional[Path] = None,
-    limit: Optional[int] = None,
+    category_map: Optional[dict[str, str]] = None,
     run_omnidocbench: bool = False,
     omnidocbench_image: Optional[str] = None,
-    category_map: Optional[dict[str, str]] = None,
+    omnidocbench_ground: Optional[Path] = None,
 ) -> dict:
     """Run one VLM over the dataset's PDFs, scoring against gold markdown.
 
@@ -393,9 +394,10 @@ def run_vlm(
         aggregates.update(_run_vlm_omnidocbench(
             dataset, run_dir, model_name, parsed_docs,
             pdfs_dir=pdfs_dir,
-            out_md_dir=out_md_dir,
+            out_md_dir=Path(out_md_dir),
             category_map=category_map,
             omnidocbench_image=omnidocbench_image,
+            gt_path=Path(omnidocbench_ground),
             raw_markdown=raw_markdown,
         ))
 
@@ -435,6 +437,7 @@ def _run_vlm_omnidocbench(
     pdfs_dir: Optional[Path],
     out_md_dir: Path,
     category_map: Optional[dict[str, str]],
+    gt_path: Optional[Path],
     omnidocbench_image: Optional[str],
     raw_markdown: bool = False,
 ) -> dict[str, float]:
@@ -450,6 +453,7 @@ def _run_vlm_omnidocbench(
     odb_dir = run_dir / "omnidocbench"
     odb_dir.mkdir(parents=True, exist_ok=True)
 
+    """
     if dataset.omnidocbench_path is not None:
         # Native OmniDocBench GT already carries real text/latex/html, so no PDF
         # extraction is needed — pass the file through verbatim.
@@ -476,6 +480,7 @@ def _run_vlm_omnidocbench(
     if gt_path is None:
         print("[omnidocbench] dataset has no ground-truth source; skipping.")
         return {}
+    """
 
     # One markdown file per page in OmniDocBench's expected flat layout.
     """
@@ -488,7 +493,7 @@ def _run_vlm_omnidocbench(
 
     return run_eval(
         gt_path=gt_path,
-        pred_md_dir=Path(out_md_dir),
+        pred_md_dir=out_md_dir,
         result_dir=odb_dir / f"results_{model_name}",
         docker_image=omnidocbench_image or DEFAULT_IMAGE,
     )

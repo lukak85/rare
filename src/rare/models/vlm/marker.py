@@ -69,7 +69,7 @@ class MarkerBackend:
 
             os.makedirs(out_md_dir, exist_ok=True)
             for i, page_md in enumerate(pages):
-                path = os.path.join(out_md_dir, f"{pdf_name.split('.')[0]}_{i:02d}.md")
+                path = os.path.join(out_md_dir, f"{pdf_name.split('.')[0]}_{i}.md")
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(page_md + "\n")
 

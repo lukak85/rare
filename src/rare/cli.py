@@ -185,10 +185,14 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         images_dir = Path(args.images_dir) if args.images_dir else None
         category_map = load_category_map(args.category_map) if args.category_map else None
         agg = run_vlm(
-            dataset, vlm, run_dir, images_dir=images_dir, pdfs_dir=pdfs_dir, limit=args.limit,
+            dataset, vlm, run_dir,
+            limit=args.limit,
+            pdfs_dir=pdfs_dir,
+            images_dir=images_dir,
+            category_map=category_map,
             run_omnidocbench=args.run_omnidocbench,
             omnidocbench_image=args.omnidocbench_image,
-            category_map=category_map,
+            omnidocbench_ground=args.omnidocbench_ground
         )
 
     else:
