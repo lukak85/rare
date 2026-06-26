@@ -109,3 +109,78 @@ def layout_parser_to_coco(
         "annotations": annotations,
         "categories": coco_categories,
     }
+
+
+def scale_coco_annotations(annotations, src_wh, dst_wh):
+    """Rescale COCO annotation boxes from one render size to another.
+
+    Use when boxes were produced against an image of size `src_wh` but you want
+    to draw them on a render of the same page at a different size `dst_wh`
+    (e.g. a COCO file emitted at high DPI displayed over a low-DPI image). Boxes
+    are stored as absolute pixels, so the only correction is a uniform scale.
+
+    The x-axis and y-axis are scaled by their own dimension ratios rather than a
+    single DPI scalar: rasterizing rounds points->pixels independently per axis,
+    so `dst_w/src_w` and `dst_h/src_h` can differ by a fraction of a pixel, and
+    using each absorbs that rounding exactly.
+
+    Args:
+        annotations: list of COCO annotation dicts (`bbox = [x, y, w, h]`).
+        src_wh: (width, height) the annotations were created against.
+        dst_wh: (width, height) of the image you want to draw on.
+
+    Returns:
+        A new list of annotation dicts with `bbox`/`area` scaled; all other
+        fields (`category_id`, `order_id`, `score`, ...) are copied unchanged.
+    """
+    src_w, src_h = src_wh
+    dst_w, dst_h = dst_wh
+    sx = dst_w / src_w
+    sy = dst_h / src_h
+
+    scaled = []
+    for ann in annotations:
+        x, y, w, h = ann["bbox"]
+        new_ann = dict(ann)
+        new_ann["bbox"] = [x * sx, y * sy, w * sx, h * sy]
+        if "area" in ann:
+            new_ann["area"] = ann["area"] * sx * sy
+        scaled.append(new_ann)
+    return scaled
+
+
+def rescale_coco_to(coco, target_wh):
+    """Rescale a whole COCO dict's boxes to new per-image sizes.
+
+    Args:
+        coco: a COCO dict (`images`, `annotations`, `categories`).
+        target_wh: maps `image_id -> (target_width, target_height)`.
+
+    Returns:
+        A new COCO dict with each image's `width`/`height` set to its target and
+        all of its annotations scaled accordingly (see `scale_coco_annotations`).
+        Images absent from `target_wh` are passed through unscaled.
+    """
+    src_wh = {img["id"]: (img["width"], img["height"]) for img in coco["images"]}
+
+    out_images = []
+    for img in coco["images"]:
+        if img["id"] in target_wh:
+            tw, th = target_wh[img["id"]]
+            out_images.append({**img, "width": tw, "height": th})
+        else:
+            out_images.append(dict(img))
+
+    out_annotations = []
+    by_image: dict = {}
+    for ann in coco["annotations"]:
+        by_image.setdefault(ann["image_id"], []).append(ann)
+    for image_id, anns in by_image.items():
+        if image_id in target_wh:
+            out_annotations.extend(
+                scale_coco_annotations(anns, src_wh[image_id], target_wh[image_id])
+            )
+        else:
+            out_annotations.extend(dict(a) for a in anns)
+
+    return {**coco, "images": out_images, "annotations": out_annotations}
