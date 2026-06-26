@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pdfplumber
 
+from rare.parse.clean import STRUCTURED_LABELS, normalize_text
+
 
 def extract_text_for_page(
     pdf: pdfplumber.PDF,
@@ -35,7 +37,13 @@ def extract_text_for_page(
         y1_pdf = y1n / 1000.0 * ph
         try:
             cropped = pdf_page.crop((x0, y0_pdf, x1, y1_pdf), strict=False)
-            results[region["region_id"]] = (cropped.extract_text() or "").strip()
+            raw = (cropped.extract_text() or "").strip()
+            # Strip line-wrap newlines / de-hyphenate prose; leave structured
+            # regions (tables, lists) untouched, where newlines carry meaning.
+            if region.get("label") in STRUCTURED_LABELS:
+                results[region["region_id"]] = raw
+            else:
+                results[region["region_id"]] = normalize_text(raw)
         except Exception:
             results[region["region_id"]] = ""
 

@@ -16,6 +16,7 @@ from rare.doc.schema import (
 )
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
+from rare.parse.merge import merge_flowing_paragraphs
 from rare.parse.pdf import render_pages
 from rare.parse.text import extract_text_for_page
 
@@ -97,6 +98,10 @@ def parse_pdf(
                 })
 
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
+
+            # Re-join paragraphs split across columns, page geometry, or floats
+            # (e.g. a figure inserted mid-paragraph) into one logical paragraph.
+            regions, texts = merge_flowing_paragraphs(regions, texts)
 
             current_article = assemble_page(
                 doc,
