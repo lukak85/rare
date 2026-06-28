@@ -176,14 +176,17 @@ The supported models (and therefore given Python version recommendations) were t
 
 ### VLM track
 
-| Model                                                      | CLI name    | Type             | Recommended Python version |
-|------------------------------------------------------------|-------------|------------------|----------------------------|
-| **[Docling](https://github.com/docling-project/docling)**  | `docling`   | Specialized VLMs | 3.14                       |
-| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**  | `dots-ocr`  | Specialized VLMs | 3.12                       |
-| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**          | `glm-ocr`   | Specialized VLMs | 3.13                       |
-| **[Marker](https://github.com/datalab-to/marker)**         | `marker`    | Specialized VLMs | 3.10                       |
-| **[MinerU](https://github.com/opendatalab/mineru)**        | `mineru`    | Specialized VLMs | 3.13                       |
-| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)** | `paddleocr` | Specialized VLMs | 3.12                       |
+| Model                                                              | CLI name    | Type             | Recommended Python version |
+|--------------------------------------------------------------------|-------------|------------------|----------------------------|
+| **[Youtu-Parsing](https://github.com/deepseek-ai/DeepSeek-OCR-2)** | `youtu`     | Specialized VLMs | 3.12.9                     |
+| **[Docling](https://github.com/docling-project/docling)**          | `docling`   | Specialized VLMs | 3.14                       |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**          | `dots-ocr`  | Specialized VLMs | 3.12                       |
+| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                  | `glm-ocr`   | Specialized VLMs | 3.13                       |
+| **[Marker](https://github.com/datalab-to/marker)**                 | `marker`    | Specialized VLMs | 3.10                       |
+| **[MinerU](https://github.com/opendatalab/mineru)**                | `mineru`    | Specialized VLMs | 3.13                       |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**         | `paddleocr` | Specialized VLMs | 3.12                       |
+| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**   | `paddleocr` | General VLMs     | 3.12                       |
+| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**     | `youtu`     | Specialized VLMs | 3.10                       |
 
 ## Outputs
 
@@ -337,6 +340,10 @@ Then point `rare parse` or `rare evaluate` at it via `--config {"grid_root": "<p
 
 ---
 
+### DeepSeek-OCR-2
+
+Follow the installation instructions on [DeepSeek-OCR-2 GitHub repository](https://github.com/deepseek-ai/DeepSeek-OCR-2).
+
 ### Docling
 
 Follow the [installation instructions](https://www.docling.ai/). If you have a NVIDIA GPU with CUDA version 12.8, run:
@@ -481,7 +488,11 @@ And then:
 python -m pip install "paddleocr[all]"
 ```
 
--
+## Youtu
+
+Follow the instructions on [Youtu's GitHub repository](https://github.com/TencentCloudADP/youtu-parsing).
+
+---
 
 ### Claude
 
@@ -504,6 +515,11 @@ https://ai.google.dev/gemini-api/docs/document-processing
 TODO
 
 </details>
+
+
+## Qwen3-VL
+
+Follow the instructions of model of choice on [Qwen3-VL's Hugging Face repository](https://huggingface.co/collections/Qwen/qwen3-vl).
 
 ## Evaluation
 

@@ -1,0 +1,4 @@
+{
+  "model_path": "data/weights/Youtu-Parsing",
+  "angle_correct_model_path": "data/weights/Youtu-Parsing/corr"
+}

@@ -51,12 +51,14 @@ _DEFERRED: dict[str, dict[str, str]] = {
     },
     "vlm": {
         # Specialized VLMs
+        "deepseek-ocr":         "rare.models.vlm.deepseekocr",
         "docling":              "rare.models.vlm.docling",
         "dots-ocr":             "rare.models.vlm.dotsocr",
         "glm-ocr":              "rare.models.vlm.glmocr",
         "mineru":               "rare.models.vlm.mineru",
         "paddleocr":            "rare.models.vlm.paddleocr",
         "marker":               "rare.models.vlm.marker",
+        "youtu":                "rare.models.vlm.youtu",
 
         "claude":               "rare.models.vlm.claude",
         "deepseek":             "rare.models.vlm.depseek",
