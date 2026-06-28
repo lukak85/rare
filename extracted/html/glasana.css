@@ -43,7 +43,7 @@ article {
 
 /* ---- Two-column body ---- */
 .article-body {
-  columns: 2;
+  /* columns: 2; */
   column-gap: var(--col-gap);
   column-rule: 1px solid var(--rule);
   hyphens: auto;

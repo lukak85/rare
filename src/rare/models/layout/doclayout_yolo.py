@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from rare.config.paths import WEIGHTS_PATH
+from rare.doc.schema import TAXONOMY_TO_GLASBENA_MLADINA
 from rare.models.registry import register
 
 
@@ -21,6 +22,18 @@ figure_caption: figure_caption
 # through unchanged. Targets match the values in
 # `rare.evaluate.omnidocbench.DEFAULT_CATEGORY_MAP`.
 PRED_CATEGORY_MAPS: dict[str, dict[str, str]] = {
+    "DocStructBench": {
+        "title":           "title",
+        "plain text":      "text",
+        "abandon":         "abandon",
+        "figure":          "figure",
+        "figure_caption":  "figure_caption",
+        "table":           "table",
+        "table_caption":   "table_caption",
+        "table_footnote":  "table_footnote",
+        "isolate_formula": "equation_isolated",
+        "formula_caption": "equation_caption",
+    },
     "DocLayNet": {
         "Caption":        "figure_caption",
         "Footnote":       "page_footnote",
@@ -163,13 +176,21 @@ class DocLayoutYOLOBackend:
         else:
             self._model = lp.DocLayoutYOLOLayoutModel(
                 WEIGHTS_PATH + "/model/doclayoutyolo/doclayout_yolo_docstructbench_imgsz1024.pt",
-                label_map="Glasana",
+                label_map="DocStructBench",
             )
-            label_map = "Glasana"
+            label_map = "DocStructBench"
         # When predictions already use the Glasbena source vocabulary (the
         # "Glasana" label_map), they share the ground-truth taxonomy, so the
         # runner reuses the GT category map and this stays None.
         self.pred_category_map = PRED_CATEGORY_MAPS.get(label_map)
+        # Advertise the prediction vocabulary to the parse pipeline so it can
+        # relabel foreign labels (e.g. D4LA) into Glasbena RegionCategory values
+        # before assembly. None when predictions already speak Glasbena
+        # ("Glasana" label_map) or when no inbound map exists for the vocabulary.
+        self.source_taxonomy = (
+            label_map if isinstance(label_map, str) and label_map in TAXONOMY_TO_GLASBENA_MLADINA
+            else None
+        )
         self.label_map = self._model.label_map
 
     def detect(self, image):

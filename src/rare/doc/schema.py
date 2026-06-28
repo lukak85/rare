@@ -125,10 +125,10 @@ class BBox:
         """Convert from connections.json normalized 0-1000 format [x0,y0,x1,y1]."""
         x0, y0, x1, y1 = coords
         return cls(
-            x1=x0 / 1000.0 * page_width,
-            y1=y0 / 1000.0 * page_height,
-            x2=x1 / 1000.0 * page_width,
-            y2=y1 / 1000.0 * page_height,
+            x1=float(x0 / 1000.0 * page_width),
+            y1=float(y0 / 1000.0 * page_height),
+            x2=float(x1 / 1000.0 * page_width),
+            y2=float(y1 / 1000.0 * page_height),
         )
 
     def to_dict(self) -> dict:
@@ -490,4 +490,104 @@ LABEL_TO_CLASS: dict[str, type] = {
     "Question":       QuestionItem,
     "Abandon":        AbandonItem,
 }
+
+
+# ---------------------------------------------------------------------------
+# Foreign-taxonomy → Glasbena RegionCategory maps
+# ---------------------------------------------------------------------------
+# Bridge labels emitted by detectors trained on other datasets into the
+# Glasbena vocabulary, so pipeline assembly (LABEL_TO_CLASS, above) builds the
+# right DocItem subclass. This is the *inbound* counterpart of the outbound
+# Glasbena → OmniDocBench `category_type` maps used for mAP scoring
+# (DEFAULT_CATEGORY_MAP in rare.evaluate.omnidocbench, PRED_CATEGORY_MAPS in
+# rare.models.layout.vgt). Each map is keyed by the source label name and
+# yields a RegionCategory; the registry below is keyed by taxonomy name so a
+# layout backend can advertise its vocabulary via a `source_taxonomy` attr.
+
+# D4LA (27 classes — the VGT training taxonomy). Best-effort fit into Glasbena;
+# D4LA carries no formula/key-value distinctions, so those fall back to the
+# nearest text-bearing Glasbena category.
+D4LA_TO_GLASBENA_MLAIDNA: dict[str, RegionCategory] = {
+    # headings
+    "DocTitle":    RegionCategory.HEADLINE,
+    "ParaTitle":   RegionCategory.SUBHEAD,
+    "RegionTitle": RegionCategory.SUBHEAD,
+    # body text / lists / misc text regions
+    "ParaText":    RegionCategory.PARAGRAPH,
+    "ListText":    RegionCategory.UNORDERED_LIST,
+    "RegionList":  RegionCategory.UNORDERED_LIST,
+    "RegionKV":    RegionCategory.PARAGRAPH,
+    "Abstract":    RegionCategory.DECK,
+    "Author":      RegionCategory.AUTHOR,
+    "Date":        RegionCategory.DATELINE,
+    "Question":    RegionCategory.QUESTION,
+    "OtherText":   RegionCategory.PARAGRAPH,
+    "Catalog":     RegionCategory.TOC,
+    "LetterDear":  RegionCategory.PARAGRAPH,
+    "LetterSign":  RegionCategory.BYLINE,
+    "Number":      RegionCategory.PARAGRAPH,   # ambiguous; PageNumber covers folios
+    "Equation":    RegionCategory.PARAGRAPH,   # no formula category in Glasbena
+    "Reference":   RegionCategory.LITERATURE,
+    # page / letter furniture
+    "LetterHead":  RegionCategory.HEADER,
+    "PageHeader":  RegionCategory.HEADER,
+    "Footer":      RegionCategory.FOOTER,
+    "PageFooter":  RegionCategory.FOOTER,
+    "PageNumber":  RegionCategory.PAGE_NUM,
+    # figures / tables
+    "Figure":      RegionCategory.FIGURE,
+    "FigureName":  RegionCategory.CAPTION,
+    "Table":       RegionCategory.TABLE,
+    "TableName":   RegionCategory.CAPTION,
+}
+
+# DocStructBench (10 classes — the default DocLayout-YOLO taxonomy). Glasbena
+# has no formula category, so formulas fall back to PARAGRAPH; the single
+# generic "title" class maps to HEADLINE.
+DOCSTRUCTBENCH_TO_GLASBENA_MLADINA: dict[str, RegionCategory] = {
+    "title":           RegionCategory.HEADLINE,
+    "plain text":      RegionCategory.PARAGRAPH,
+    "abandon":         RegionCategory.ABANDON,
+    "figure":          RegionCategory.FIGURE,
+    "figure_caption":  RegionCategory.CAPTION,
+    "table":           RegionCategory.TABLE,
+    "table_caption":   RegionCategory.CAPTION,
+    "table_footnote":  RegionCategory.FOOTNOTE,
+    "isolate_formula": RegionCategory.PARAGRAPH,   # no formula category in Glasbena
+    "formula_caption": RegionCategory.CAPTION,
+}
+
+# Registry of inbound taxonomy maps, keyed by the name a backend reports via its
+# `source_taxonomy` attribute.
+TAXONOMY_TO_GLASBENA_MLADINA: dict[str, dict[str, RegionCategory]] = {
+    "D4LA": D4LA_TO_GLASBENA_MLAIDNA,
+    "DocStructBench": DOCSTRUCTBENCH_TO_GLASBENA_MLADINA,
+}
+
+_VALID_LABELS: frozenset[str] = frozenset(c.value for c in RegionCategory)
+
+
+def relabel_to_glasbena_mladina(label: str, taxonomy: Optional[str]) -> str:
+    """Translate a detector label into a Glasbena RegionCategory value string.
+
+    `taxonomy` is the source vocabulary name (a `TAXONOMY_TO_GLASBENA` key,
+    typically a backend's `source_taxonomy` attr). Resolution order:
+
+    1. `taxonomy` unknown / None → return `label` unchanged (the backend already
+       speaks Glasbena, or we have no map for it).
+    2. `label` found in the taxonomy map → return the mapped RegionCategory value.
+    3. `label` already a valid Glasbena label → pass through unchanged (lets a
+       backend emit a mix of mapped and native labels safely).
+    4. otherwise → `label` unchanged (assembly applies its own "Paragraph"
+       fallback for unrecognised labels).
+    """
+    if not taxonomy:
+        return label
+    tmap = TAXONOMY_TO_GLASBENA_MLADINA.get(taxonomy)
+    if tmap is None:
+        return label
+    mapped = tmap.get(label)
+    if mapped is not None:
+        return mapped.value
+    return label
 

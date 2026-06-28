@@ -12,11 +12,15 @@ from rare.doc.schema import (
     Article,
     GlasanaDocument,
     PageInfo,
+    relabel_to_glasbena_mladina,
 )
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
+from rare.parse.merge import merge_flowing_paragraphs
 from rare.parse.pdf import render_pages
 from rare.parse.text import extract_text_for_page
+from rare.utils.conversionutils import layout_parser_to_coco
+from rare.utils.fileutils import save_coco_to_json
 
 if TYPE_CHECKING:
     from rare.models.base import LayoutBackend, ReadingOrderBackend
@@ -39,11 +43,25 @@ def parse_pdf(
     order: "ReadingOrderBackend",
     output_dir: str | Path = "outputs/parsed",
     dpi: int = 200,
+    per_page: bool = False,
+    save_coco: bool = False
 ) -> Path:
     """Run layout detection, reading-order, text extraction, and assembly on a PDF.
 
     Writes `{stem}_doc.json`, `{stem}.md`, `{stem}.html`, and `figures/` to
-    `output_dir/<pdf_stem>/`. Returns the output directory.
+    `output_dir/<pdf_stem>/`. When `per_page` is True (default), also writes one
+    Markdown file per page under `pages/` as `{stem}_{page_no}.md`. Returns the
+    output directory.
+
+    If `layout` advertises a `source_taxonomy` (e.g. VGT reporting "D4LA"), each
+    detected label is translated into the Glasbena vocabulary via
+    `relabel_to_glasbena` before assembly, so foreign-trained detectors produce
+    the correct GlasanaDocument item types.
+
+    When `save_coco` is True, also writes `{stem}_coco.json` — one joined COCO
+    file carrying the layout detector's raw boxes/labels plus an `order_id` per
+    annotation from the reading-order backend (same export the evaluate pipeline
+    produces).
     """
     pdf_path = Path(pdf_path)
     pdf_stem = pdf_path.stem
@@ -51,8 +69,11 @@ def parse_pdf(
     figures_dir = out_dir / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    source_taxonomy = getattr(layout, "source_taxonomy", None)
+
     doc = GlasanaDocument(source_pdf=pdf_stem)
     current_article: Article | None = None
+    coco_predictions: list[dict] = []
 
     page_images = render_pages(pdf_path, dpi=dpi)
 
@@ -74,18 +95,34 @@ def parse_pdf(
                 pdf_stem=pdf_stem,
             )
 
+            if save_coco:
+                image_info = {
+                    "id":        page_no,
+                    "file_name": f"{pdf_stem}_{page_no}.jpg",
+                    "width":     img_w,
+                    "height":    img_h,
+                }
+                coco_predictions.append(layout_parser_to_coco(
+                    detected_layout, image_info, layout.label_map,
+                    predicted_order=order_indices,
+                ))
+
             # Build regions dicts in reading order
             regions: list[dict] = []
             for idx in order_indices:
                 block = detected_layout[idx]
                 regions.append({
                     "region_id": str(uuid.uuid4()),
-                    "label": block.type or "Paragraph",
+                    "label": relabel_to_glasbena_mladina(block.type or "Paragraph", source_taxonomy),
                     "bbox_norm_1000": _bbox_to_norm_1000(block, img_w, img_h),
                     "score": getattr(block, "score", None),
                 })
 
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
+
+            # Re-join paragraphs split across columns, page geometry, or floats
+            # (e.g. a figure inserted mid-paragraph) into one logical paragraph.
+            regions, texts = merge_flowing_paragraphs(regions, texts)
 
             current_article = assemble_page(
                 doc,
@@ -99,4 +136,29 @@ def parse_pdf(
                 page_image=page_image,
             )
 
-    return write_outputs(doc, output_dir)
+    if save_coco and coco_predictions:
+        coco_data = _join_coco_pages(coco_predictions)
+        save_coco_to_json(coco_data, str(out_dir / f"{pdf_stem}_coco.json"))
+
+    return write_outputs(doc, output_dir, per_page=per_page)
+
+
+def _join_coco_pages(pages: list[dict]) -> dict:
+    """Merge per-page COCO dicts into one, reassigning globally unique annotation
+    IDs. Categories are taken from the first page (all pages share one detector,
+    hence one taxonomy)."""
+    images: list[dict] = []
+    annotations: list[dict] = []
+    annotation_id = 1
+    for page in pages:
+        images.extend(page["images"])
+        for ann in page["annotations"]:
+            ann = dict(ann)
+            ann["id"] = annotation_id
+            annotation_id += 1
+            annotations.append(ann)
+    return {
+        "images": images,
+        "annotations": annotations,
+        "categories": pages[0]["categories"],
+    }

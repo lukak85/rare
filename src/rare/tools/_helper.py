@@ -13,6 +13,7 @@ from typing import List, Optional
 
 from rare.utils.displayutils import *
 from rare.utils.fileutils import save_coco_to_json, read_json
+from rare.utils.conversionutils import scale_coco_annotations
 
 from ..utils.displayutils import D4LA_COLOR_MAP, GLASANA_COLOR_MAP, PUBLAYNET_COLOR_MAP
 
@@ -188,8 +189,13 @@ def visualize_annotations(coco, image_id, save_path=None, visualize_text=False, 
     img_info = coco.loadImgs(coco.getImgIds([int(image_id)]))[0]
     img_path = os.path.join(IMAGES_ROOT if not images_root else images_root, img_info["file_name"])
     anns = coco.loadAnns(coco.getAnnIds([int(image_id)]))
-    layout = load_coco_annotations(anns, categories=coco.cats)
     display_img = cv2.imread(img_path)
+    # The COCO may have been generated at a different DPI than the image we are
+    # drawing on; rescale boxes from their stored size to the actual image size
+    # (a no-op when they already match).
+    dst_h, dst_w = display_img.shape[:2]
+    anns = scale_coco_annotations(anns, (img_info["width"], img_info["height"]), (dst_w, dst_h))
+    layout = load_coco_annotations(anns, categories=coco.cats)
     positions = None
     if visualize_text:
         draw_text(display_img, layout)
@@ -219,8 +225,10 @@ def visualize_all_images(coco, save_path=None, skip_hashes=None, dataset="Glasna
         print(f"Processing image {img_info['file_name']} with id {image_id}")
         img_path = os.path.join(IMAGES_ROOT, img_info["file_name"])
         anns = coco.loadAnns(coco.getAnnIds([int(image_id)]))
-        layout = load_coco_annotations(anns, categories=coco.cats)
         display_img = cv2.imread(img_path)
+        dst_h, dst_w = display_img.shape[:2]
+        anns = scale_coco_annotations(anns, (img_info["width"], img_info["height"]), (dst_w, dst_h))
+        layout = load_coco_annotations(anns, categories=coco.cats)
         positions = order_from_order_id(anns)
         draw_layout(display_img, layout, order=positions, save_path=save_path, color_map=COLOR_MAP_DATASETS.get(dataset))
 
