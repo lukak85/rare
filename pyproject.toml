@@ -17,6 +17,7 @@ dependencies = [
     "pdf2image",
     "pillow",
     "opencv-python",
+    "tqdm"
 ]
 
 [project.optional-dependencies]

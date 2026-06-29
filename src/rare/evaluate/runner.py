@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Iterable, Optional
+from tqdm import tqdm
 
 from rare.evaluate.datasets import EvalDataset
 from rare.evaluate.pipeline_eval import (
@@ -133,7 +134,7 @@ def run_pipeline(
     if limit:
         samples = samples[:limit]
 
-    for sample in samples:
+    for sample in tqdm(samples):
         image = _open_image(sample.image_path)
         predicted = layout.detect(sample.image_path)
         predicted_order = order.order(
