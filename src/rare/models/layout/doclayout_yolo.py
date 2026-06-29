@@ -44,7 +44,7 @@ PRED_CATEGORY_MAPS: dict[str, dict[str, str]] = {
         "Picture":        "figure",
         "Section-header": "title",
         "Table":          "table",
-        "Text":           "text_block",
+        "Text":           "text",
         "Title":          "title",
     },
     "D4LA": {

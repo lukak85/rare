@@ -222,10 +222,12 @@ def load_glasbena_mladina(
         if not ann_path.is_absolute():
             ann_path = root / ann_path
     else:
-        enriched = root / "annotations_with_order.json"
-        ann_path = enriched if enriched.exists() else root / "annotations.json"
-    conn_path = root / "connections.json"
-    coco = COCO(str(ann_path))
+        ann_path = root / "annotations.json"
+
+    import os
+    import contextlib
+    with contextlib.redirect_stdout(open(os.devnull, "w")):
+        coco = COCO(str(ann_path))
 
     # Native OmniDocBench GT (optional): explicit path, else the conventional
     # location. Used verbatim by the runner when present.
@@ -236,11 +238,6 @@ def load_glasbena_mladina(
     else:
         odb_path = root / "omnidocbench" / "omnidocbench.json"
     odb_path = odb_path if odb_path.exists() else None
-
-    connections = []
-    if conn_path.exists():
-        connections = json.loads(conn_path.read_text())
-    conn_by_filename = {Path(e["image"]).name: e for e in connections}
 
     img_root = Path(images_dir) if images_dir else root
     pdf_root = Path(pdfs_dir) if pdfs_dir else root # TODO
@@ -256,16 +253,7 @@ def load_glasbena_mladina(
             page_no = 0
 
         ground_layout = _coco_to_layout(coco, image_id)
-        # Prefer the precomputed permutation in `order_id`; fall back to the
-        # connections.json IoU match only when annotations lack order_id.
         ground_order = _order_id_to_order(coco, image_id)
-        if ground_order is None:
-            conn_entry = conn_by_filename.get(file_name)
-            ground_order = (
-                _connections_to_order(conn_entry, ground_layout, info["width"], info["height"])
-                if conn_entry
-                else None
-            )
 
         samples.append(EvalSample(
             image_path=img_root / file_name,

@@ -536,12 +536,13 @@ manually annotated Glasbena Mladina magazines.
 
 ## Layout Analysis
 
-| Model          | Backbone | mAP/mAP50/mAP70 |
-|----------------|----------|-----------------|
-| DiT            | TODO     | TODO            |
-| DocLayout-YOLO | TODO     | TODO            |
-| LayoutLMv3     | TODO     | TODO            |
-| DocLayout-YOLO | TODO     | TODO            |
+| Model - _backbone_         | Pretrained / fine-tuned on | mAP / mAP50 / mAP70 / mAP-s / mAP-m / mAP-l  | Title / text / figure / figure_caption AP |
+|----------------------------|----------------------------|----------------------------------------------|-------------------------------------------|
+| DiT                        |                            | TODO                                         |                                           |
+| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / D4LA        | 53.44 / 67.81 / 56.52 / 11.64 / 33.86 /67.49 | 36.40 / 68.21 / 77.13 / 32.02             |
+| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / DocLayNet   | 48.22 / 65.59 / 50.06 / 8.28 / 31.92 / 61.82 | 35.99 / 65.42 / 69.82 / 21.64             |
+| LayoutLMv3                 |                            | TODO                                         |                                           |
+| DocLayout-YOLO             |                            | TODO                                         |                                           |
 
 <details>
 <summary><b>Manual evaluation</b></summary>

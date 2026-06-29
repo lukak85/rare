@@ -93,8 +93,7 @@ def _build_config_layout_yaml(gt_cat_mapping: Optional[str] = """\
     eval_cat:                # Categories participating in final evaluation
       block_level:           # Block level categories, see OmniDocBench evaluation set introduction for details
         - title              # Title
-        - text               # Text$1
-        - abandon            # Includes headers, footers, page numbers, and page annotations
+        - text               # Text
         - figure             # Image
         - figure_caption     # Image caption
     gt_cat_mapping:          # Mapping table from ground truth to final evaluation categories, key is ground truth category, value is final evaluation category name{gt_cat_mapping}
