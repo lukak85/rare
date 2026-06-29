@@ -536,13 +536,14 @@ manually annotated Glasbena Mladina magazines.
 
 ## Layout Analysis
 
-| Model - _backbone_         | Pretrained / fine-tuned on | mAP / mAP50 / mAP70 / mAP-s / mAP-m / mAP-l  | Title / text / figure / figure_caption AP |
-|----------------------------|----------------------------|----------------------------------------------|-------------------------------------------|
-| DiT                        |                            | TODO                                         |                                           |
-| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / D4LA        | 53.44 / 67.81 / 56.52 / 11.64 / 33.86 /67.49 | 36.40 / 68.21 / 77.13 / 32.02             |
-| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / DocLayNet   | 48.22 / 65.59 / 50.06 / 8.28 / 31.92 / 61.82 | 35.99 / 65.42 / 69.82 / 21.64             |
-| LayoutLMv3                 |                            | TODO                                         |                                           |
-| DocLayout-YOLO             |                            | TODO                                         |                                           |
+| Model - _backbone_         | Pretrained / fine-tuned on    | mAP / mAP50 / mAP70 / mAP-s / mAP-m / mAP-l   | Title / text / figure / figure_caption AP |
+|----------------------------|-------------------------------|-----------------------------------------------|-------------------------------------------|
+| DiT                        |                               | TODO                                          |                                           |
+| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / D4LA           | 53.44 / 67.81 / 56.52 / 11.64 / 33.86 /67.49  | 36.40 / 68.21 / 77.13 / 32.02             |
+| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / DocLayNet      | 48.22 / 65.59 / 50.06 / 8.28 / 31.92 / 61.82  | 35.99 / 65.42 / 69.82 / 21.64             |
+| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / DocStructBench | 55.06 / 65.98 / 58.61 / 18.02 / 38.38 / 64.11 | 48.43 / 71.72 / 69.91 / 30.17             |
+| LayoutLMv3                 |                               | TODO                                          |                                           |
+| DocLayout-YOLO             |                               | TODO                                          |                                           |
 
 <details>
 <summary><b>Manual evaluation</b></summary>
