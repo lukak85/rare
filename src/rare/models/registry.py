@@ -26,11 +26,6 @@ _DEFERRED: dict[str, dict[str, str]] = {
         # Detectron2 family
         "faster-rcnn":     "rare.models.layout.detectron2_models",
         "mask-rcnn":       "rare.models.layout.detectron2_models",
-        # DiT, LayoutLMv3, VGT, SwinDocSeg — each has its own LP backend
-        "dit":             "rare.models.layout.dit",
-        "layoutlmv3":      "rare.models.layout.layoutlmv3",
-        "vgt":             "rare.models.layout.vgt",
-        "swindocseg":      "rare.models.layout.swindocseg",
         # YOLO family
         "doclayout-yolo":  "rare.models.layout.doclayout_yolo",
         # DETR family
@@ -40,10 +35,14 @@ _DEFERRED: dict[str, dict[str, str]] = {
         "pp-doclayoutv3":  "rare.models.layout.paddle_models",
         # Misc
         "efficientdet":    "rare.models.layout.effdet",
-        "docstrum":        "rare.models.layout.classical",
-        "rlsa":            "rare.models.layout.classical",
-        "recursive-xycut": "rare.models.layout.classical",
-        "nemotron":        "rare.models.layout.nemotron",
+        #"docstrum":        "rare.models.layout.classical",
+        #"rlsa":            "rare.models.layout.classical",
+        #"recursive-xycut": "rare.models.layout.classical",
+        #"nemotron":        "rare.models.layout.nemotron",
+        "dit":             "rare.models.layout.dit",
+        "layoutlmv3":      "rare.models.layout.layoutlmv3",
+        "vgt":             "rare.models.layout.vgt",
+        "swindocseg":      "rare.models.layout.swindocseg",
     },
     "order": {
         "top-bottom":             "rare.models.order.builtin",
