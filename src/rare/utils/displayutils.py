@@ -66,6 +66,28 @@ D4LA_COLOR_MAP = {
 }
 
 # Color map matching our annotation categories
+PPDOCLAYOUTV3_COLOR_MAP = {
+    "header": "#9EA3FF",
+    "footer": "#0D38D4",
+    "number": "#69C0FF",
+    "abstract": "#008BAD",
+    "title": "#0D9E38",
+    "text": "#AB59F7",
+    "footnote": "#0D38D4",
+    "image": "#69C0FF",
+    "figure_title": "#008BAD",
+    "reference_content": "#DE5492",
+    "aside_text": "#833561",
+    "formula_number": "#9EA3FF",
+    "chart": "#0D38D4",
+    "algorithm": "#69C0FF",
+    "doc_title": "#A4F08F",
+    "table": "#0A0A46",
+    "formula": "#311F24",
+    "seal": "#000000"
+}
+
+# Color map matching our annotation categories
 GLASANA_COLOR_MAP = {
     "Header": "#9EA3FF",
     "Footer": "#0D38D4",

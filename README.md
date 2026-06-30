@@ -536,34 +536,34 @@ manually annotated Glasbena Mladina magazines.
 
 ## Layout Analysis
 
-| Model - _backbone_         | Pretrained / fine-tuned on    | mAP / mAP50 / mAP70 / mAP-s / mAP-m / mAP-l   | Title / text / figure / figure_caption AP |
-|----------------------------|-------------------------------|-----------------------------------------------|-------------------------------------------|
-| DiT                        |                               | TODO                                          |                                           |
-| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / D4LA           | 53.44 / 67.81 / 56.52 / 11.64 / 33.86 /67.49  | 36.40 / 68.21 / 77.13 / 32.02             |
-| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / DocLayNet      | 48.22 / 65.59 / 50.06 / 8.28 / 31.92 / 61.82  | 35.99 / 65.42 / 69.82 / 21.64             |
-| DocLayout-YOLO - _YOLOv10_ | DocSynth300k / DocStructBench | 55.06 / 65.98 / 58.61 / 18.02 / 38.38 / 64.11 | 48.43 / 71.72 / 69.91 / 30.17             |
-| LayoutLMv3                 |                               | TODO                                          |                                           |
-| DocLayout-YOLO             |                               | TODO                                          |                                           |
+| Model (_detection backbone_) | Pretrained (or model size) / fine-tuned on | Score threshold | mAP / mAP50 / mAP75 / mAP-s / mAP-m / mAP-l (%)                             | Title / text / figure / figure caption AP (%) |
+|------------------------------|--------------------------------------------|-----------------|-----------------------------------------------------------------------------|-----------------------------------------------|
+| DiT (_Cascade R-CNN_)        | Large / PubLayNet                          | 0.5             | 33.05 / 42.76 / 35.55 / 3.46 / 22.47 / 38.33                                | 16.34 / 59.34 / 23.46 / -                     |
+| DocLayout-YOLO (_YOLOv10_)   | DocSynth300k / D4LA                        | 0               | 53.44 / 67.81 / 56.52 / 11.64 / 33.86 / <u>67.49</u>                        | 36.40 / 68.21 / 77.13 / **32.02**             |
+| DocLayout-YOLO (_YOLOv10_)   | DocSynth300k / DocLayNet                   | 0               | 48.22 / 65.59 / 50.06 / 8.28 / 31.92 / 61.82                                | 35.99 / 65.42 / 69.82 / 21.64                 |
+| DocLayout-YOLO (_YOLOv10_)   | DocSynth300k / DocStructBench              | 0               | <u>55.06</u> / <u>65.98</u> / <u>58.61</u> / **18.02** / **38.38** / 64.11  | **48.43** / **71.72** / 69.91 / 30.17         |
+| LayoutLMv3 (_Cascade R-CNN_) | Base / PubLayNet                           | 0.1             | 40.88 / 54.08 / 44.12 / 8.35 / 27.80 / 45.13                                | 26.12 / 64.03 / 32.50 / -                     |
+| RF-DETR (_RF-DETR_)          | DocLayNet                                  | 0               | 31.37 / 44.34 / 31.96 / 4.98 / 15.59 / 45.60                                | 24.73 / 38.10 / 52.38 / 10.26                 |
+| PP-DocLayoutV3               | _In-house_                                 | 0               | **64.24** / **73.04** / **67.75** / <u>16.24</u> / <u>33.98</u> / **76.98** | <u>42.46</u> / <u>71.09</u> / **79.15** / -   |
+| VGT (_Cascade R-CNN_)        | DocLayNet                                  | 0.1             | 50.15 / 69.24 / 52.66 / 10.70 / 32.37 / 65    │ .42                         | 36.11 / 65.96 / <u>78.62</u> / 21.54          |
+| VGT (_Cascade R-CNN_)        | D4LA                                       | 0.1             | 50.15 / 69.24 / 52.66 / 10.70 / 32.37 / 65    │ .42                         | 32.81 / 66.53 / 70.37 / <u>30.88</u>          |
 
 <details>
 <summary><b>Manual evaluation</b></summary>
 
-Results were obtained using this repo's own implementations for evaluations:
+Results were obtained using this repo's own implementations for evaluations (used mainly for more controlled, manual
+control and checking of calculations):
 
 | Model          | Backbone | Dataset   | mAP / mAP50 / mAP70      | Class agnostic mAP / mAP50 / mAP70 |
 |----------------|----------|-----------|--------------------------|------------------------------------|
-| DiT            |          | TODO      | TODO                     |                                    |
-| DocLayout-YOLO |          | TODO      | TODO                     |                                    |
-| LayoutLMv3     |          | TODO      | TODO                     |                                    |
-| PP-DocLayoutV3 | /        | /         | TODO                     | TODO                               |
 | RF-DETR        | /        | DocLayNet | 0.3422 / 0.4064 / 0.3678 | 0.4910 / 0.6244 / 0.53606          |
 </details>
 
 ## Reading Order
 
-| Model                     | Backbone | mAP/mAP50/mAP70 |
-|---------------------------|----------|-----------------|
-| PaddleX's Improved XY-Cut | TODO     | TODO            |
+| Model                     | Backbone | Normalized edit distance |
+|---------------------------|----------|--------------------------|
+| PaddleX's Improved XY-Cut | -        | TODO                     |
 
 
 ## VLM
@@ -591,11 +591,14 @@ Top priority:
 - [X] Add specialized VLM support:
   - [x] Marker
 - [ ] Add general VLM support, among others:
+  - [x] Qwen3-VL
   - [ ] GPT 5.5
   - [ ] Gemini Pro 3.1
   - [ ] Anthropic Claude Fable 5 / Opus 4.8
   - [ ] DeepSeek V3
-- [ ] Evaluate all pipeline and VLM models
+- [ ] Evaluate all models: 
+  - [x] Pipeline
+  - [ ] VLM
 
 Lower priority:
 - [ ] Add support for Paragraph2Graph, M2Doc

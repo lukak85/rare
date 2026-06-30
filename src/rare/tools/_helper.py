@@ -21,6 +21,7 @@ COLOR_MAP_DATASETS = {
     "D4LA": D4LA_COLOR_MAP,
     "DocLayNet": DOCLAYNET_COLOR_MAP,
     "PubLayNet": PUBLAYNET_COLOR_MAP,
+    "PP-DocLayoutV3": PPDOCLAYOUTV3_COLOR_MAP,
     "GlasbenaMladina": GLASANA_COLOR_MAP
 }
 
@@ -730,6 +731,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         from ..evaluate.omnidocbench import DEFAULT_CATEGORY_MAP
         if args.layout == 'doclayout-yolo':
             from ..models.layout.doclayout_yolo import PRED_CATEGORY_MAPS
+            pred_category_map = PRED_CATEGORY_MAPS[args.dataset]
+        elif args.layout == 'rf-detr':
+            from ..models.layout.rfdetr import PRED_CATEGORY_MAPS
             pred_category_map = PRED_CATEGORY_MAPS[args.dataset]
 
         gt_category_map = DEFAULT_CATEGORY_MAP
