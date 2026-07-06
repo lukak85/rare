@@ -25,6 +25,7 @@ from rare.evaluate.pipeline_eval import (
 from rare.evaluate.report import write_report
 from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
 from rare.evaluate.omnidocbench import (
+    DEFAULT_PAGE_ATTRIBUTE_FIELDS,
     coco_to_omnidocbench,
     emit_stub_markdown,
     merge_prediction_pages,
@@ -72,6 +73,7 @@ def _write_omnidocbench_gt(
     gt_doc = json.loads(Path(dataset.coco_path).read_text())
     gt_pages = coco_to_omnidocbench(
         gt_doc, category_map, text_stub=text_stub, text_source=text_source,
+        page_attribute_fields=DEFAULT_PAGE_ATTRIBUTE_FIELDS,
     )
     gt_path = odb_dir / "gt.json"
     gt_path.write_text(json.dumps(gt_pages, indent=2))

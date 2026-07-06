@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Optional
 
 import pdfplumber
 from pycocotools.coco import COCO
+from tqdm import tqdm
 
 from rare.doc.schema import Article, GlasanaDocument, PageInfo
 from rare.parse.assemble import assemble_page
@@ -159,7 +160,7 @@ def parse_coco(
         figures_dir = Path(output_dir) / stem / "figures"
         pdf = pdfplumber.open(stem_pdf) if stem_pdf is not None else None
         try:
-            for page_no, image_id in pages:
+            for page_no, image_id in tqdm(pages):
                 info = coco.imgs[image_id]
                 img_w, img_h = info["width"], info["height"]
                 doc.pages[page_no] = PageInfo(
@@ -226,7 +227,10 @@ def _emit_omnidocbench(
     Region `text` is filled per box from the PDF via `PdfTextSource`, using
     `pdfs_dir` when given, else the directory holding the explicit `--pdf`.
     """
-    from rare.evaluate.omnidocbench import coco_to_omnidocbench
+    from rare.evaluate.omnidocbench import (
+        DEFAULT_PAGE_ATTRIBUTE_FIELDS,
+        coco_to_omnidocbench,
+    )
     from rare.evaluate.pdf_text import PdfTextSource
 
     raw = json.loads(Path(coco_path).read_text())
@@ -243,12 +247,15 @@ def _emit_omnidocbench(
     text_dir = pdfs_dir if pdfs_dir is not None else (pdf_path.parent if pdf_path else None)
     text_source = PdfTextSource(text_dir) if text_dir is not None else None
     try:
-        pages = coco_to_omnidocbench(filtered, category_map, text_source=text_source)
+        pages = coco_to_omnidocbench(
+            filtered, category_map, text_source=text_source,
+            page_attribute_fields=DEFAULT_PAGE_ATTRIBUTE_FIELDS,
+        )
     finally:
         if text_source is not None:
             text_source.close()
 
     out_path = output_dir / "omnidocbench.json"
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(pages, indent=2))
+    out_path.write_text(json.dumps(pages, indent=2, ensure_ascii=False))
     return out_path

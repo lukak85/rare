@@ -84,6 +84,18 @@ DEFAULT_CATEGORY_MAP: dict[str, str] = {
 
 UNKNOWN_FALLBACK = "text_block"
 
+# Default `{omnidocbench_page_attribute_key: coco_image_field}` map used when a
+# caller wants the standard breakdown. Our COCO GT tags each image with
+# `page_type` (ArticlePage, NewsPage, CoverPage, …); OmniDocBench's canonical
+# per-page breakdown key is `data_source`, so we surface it under that name.
+DEFAULT_PAGE_ATTRIBUTE_FIELDS: dict[str, str] = {"data_source": "page_type"}
+
+# Fallback value for a `page_attribute` whose source COCO field is present but
+# null/empty. Kept non-null so the key stays on *every* page — OmniDocBench's
+# `filter` block indexes `page_attribute[k]` unguarded (dataset/*_dataset.py),
+# so a missing key on one page would KeyError the whole run.
+PAGE_ATTR_FALLBACK = "unknown"
+
 # Stub-text scheme: a unique token per layout_det so OmniDocBench's quick_match
 # can align predicted markdown paragraphs to GT boxes without real OCR text.
 # Both GT and (IoU-relabeled) predictions emit the same token for the same box.
@@ -159,6 +171,36 @@ def _resolve_category(name: str, category_map: dict[str, str]) -> str:
     return UNKNOWN_FALLBACK
 
 
+def _build_page_attribute(
+    image_info: dict,
+    page_attribute_fields: Optional[dict[str, str]],
+) -> dict[str, str]:
+    """Build the OmniDocBench `page_attribute` dict for one COCO image.
+
+    `page_attribute_fields` maps an OmniDocBench attribute key → the COCO
+    `images[i]` field to read it from, e.g. `{"data_source": "page_type"}`.
+    Each emitted `k: v` becomes a metric-breakdown bucket in OmniDocBench's
+    `get_page_split` (labelled `"k: v"`) and a filterable key in the dataset
+    loaders' `filter` block.
+
+    Every configured key is emitted for this page: when the source field is
+    absent or null/empty, it falls back to `PAGE_ATTR_FALLBACK` rather than
+    being dropped. This keeps the key present on *every* page, which the
+    loaders' `filter` block requires (it indexes `page_attribute[k]`
+    unguarded). Callers that want a field to stay fully opt-out for
+    field-less datasets should pre-filter `page_attribute_fields` to the
+    fields that actually occur — `coco_to_omnidocbench` does this. Returns
+    `{}` when `page_attribute_fields` is falsy (the previous behaviour).
+    """
+    if not page_attribute_fields:
+        return {}
+    attrs: dict[str, str] = {}
+    for out_key, field in page_attribute_fields.items():
+        value = image_info.get(field)
+        attrs[out_key] = str(value) if value not in (None, "") else PAGE_ATTR_FALLBACK
+    return attrs
+
+
 def _resolve_map(override: Optional[dict[str, str]]) -> dict[str, str]:
     """Merge a user override on top of the default. Override wins; missing
     keys keep their default. Pass `None` to use the default unchanged."""
@@ -180,6 +222,7 @@ def coco_page_to_omnidocbench(
     category_map: Optional[dict[str, str]] = None,
     text_stub: bool = False,
     text_source: Optional[TextSource] = None,
+    page_attribute_fields: Optional[dict[str, str]] = None,
 ) -> dict:
     """Convert one COCO image + its annotations into a single OmniDocBench
     page object.
@@ -207,6 +250,13 @@ def coco_page_to_omnidocbench(
             quick_match-ignorable rather than mis-aligned. The pipeline-side
             implementation `rare.evaluate.pdf_text.PdfTextSource` extracts
             text from the rendered PDF.
+        page_attribute_fields: Optional mapping of OmniDocBench
+            `page_attribute` key → source COCO `images[i]` field, e.g.
+            `{"data_source": "page_type"}`. Populates `page_info.page_attribute`
+            so OmniDocBench slices metrics per attribute value (and can
+            `filter` by it). `None`/absent → `page_attribute: {}` (one
+            aggregate "ALL" group, the previous behaviour). See
+            `_build_page_attribute`.
     """
     cmap = _resolve_map(category_map)
     name_by_id = {c["id"]: c["name"] for c in categories}
@@ -245,12 +295,11 @@ def coco_page_to_omnidocbench(
             "height":         img_h,
             "width":          img_w,
             "image_path":     file_name,
-            # OmniDocBench's `pipeline_eval.__init__` indexes this directly
-            # (`page['page_info']['page_attribute']`) and `_build_page_attribute_labels`
-            # iterates its items to slice results by attribute. Empty dict →
-            # one aggregate group ("ALL"), which is what we want without
-            # per-attribute splits.
-            "page_attribute": {},
+            # OmniDocBench's loaders index this directly
+            # (`page['page_info']['page_attribute']`) to `filter` pages, and
+            # `get_page_split` iterates its items to slice results per
+            # attribute value. Empty dict → one aggregate group ("ALL").
+            "page_attribute": _build_page_attribute(image_info, page_attribute_fields),
         },
         "extra": {"relation": []},
     }
@@ -261,21 +310,39 @@ def coco_to_omnidocbench(
     category_map: Optional[dict[str, str]] = None,
     text_stub: bool = False,
     text_source: Optional[TextSource] = None,
+    page_attribute_fields: Optional[dict[str, str]] = None,
 ) -> list[dict]:
     """Convert a full COCO document (`{images, categories, annotations}`) into
     the OmniDocBench list-of-pages shape. Annotations are grouped by
     `image_id` and pages are emitted in the order of `coco_doc["images"]`.
+
+    `page_attribute_fields` (e.g. `{"data_source": "page_type"}`) surfaces
+    per-image COCO fields as OmniDocBench `page_attribute`s; see
+    `coco_page_to_omnidocbench`.
     """
     anns_by_image: dict[int, list[dict]] = {}
     for ann in coco_doc.get("annotations", []):
         anns_by_image.setdefault(ann["image_id"], []).append(ann)
     categories = coco_doc.get("categories", [])
+    images = coco_doc.get("images", [])
+
+    # Keep only attribute fields that appear on at least one image, so a
+    # field-less dataset stays fully opt-out (no spurious "unknown" bucket)
+    # while a partially-tagged one gets the key on *every* page (filter-safe).
+    active_fields = None
+    if page_attribute_fields:
+        active_fields = {
+            key: field for key, field in page_attribute_fields.items()
+            if any(field in img for img in images)
+        }
+
     return [
         coco_page_to_omnidocbench(
             img, anns_by_image.get(img["id"], []), categories,
             category_map, text_stub=text_stub, text_source=text_source,
+            page_attribute_fields=active_fields,
         )
-        for img in coco_doc.get("images", [])
+        for img in images
     ]
 
 
