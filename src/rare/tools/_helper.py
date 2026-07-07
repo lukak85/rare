@@ -223,7 +223,7 @@ def visualize_all_images(coco, save_path=None, skip_hashes=None, dataset="Glasna
         if skip_hashes and doc_hash in skip_hashes:
             continue
 
-        print(f"Processing image {img_info['file_name']} with id {image_id}")
+        print(f"Processing image {img_info['file_name']} with id {image_id} of type {img_info['page_type']}")
         img_path = os.path.join(IMAGES_ROOT, img_info["file_name"])
         anns = coco.loadAnns(coco.getAnnIds([int(image_id)]))
         display_img = cv2.imread(img_path)
@@ -631,34 +631,34 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         # Documents already reviewed — skip these when reviewing
         already_checked = {
-            #"00de9bb518f39464b6b5bb7254d6fdd6e2e2e1fa46710ffe84a6863dca4be950",
-            "0166d9b3f20fa5a4f6bd9d6d001f8b81b24665a6368dd0c10ed3d8a9e30dd691",
-            "04bb9872050b5a73939ae9734a7a1f6935df7b6623f03dc407f3403d52392aa6",
-            "04bc67afae7e1c9113cbbd83e98df59f252ba7757ad90d2c8856f227e5cd8beb",
-            "0525ec05617fc357460ca247faa0b0be9b2caedc8b2663680f852b93541831b6",
-            "111eba9400e08e9e0a5a257aae5c3d36c3c63dd383005a3ca65cbb4d884d8346",
-            "1c3968e8cc47ae26ed907f561ccd55dedbbad3c6645f289fe964582ba864bddd",
-            "20ecf1d1b0602973c2449ed90428bc31847ab613749ffc5d7ce92c5e05788f27",
-            "230edb119aff067fecd3586eb3ce857f9ce402b0867037c156efaaaa32d0ba4b",
-            "2a6e4009dac571c6d4e8b58009acd58a0c0ea1d859f21ac518cf82f2d52a5eda",
-            "326f6533357ab6e301abf9731667626678ccfa078497c866e12df4ff1f652e8f",
-            "4289acbeebf1a459a5339c0f3ed89268ae9437541e5fcce8cd3fa1862517e19a",
-            "53473f43fd47f257cab19acbf24ef1b1b7abe75b4cd643a2387cb10c6c4c44ea",
-            "7612369f2c0ac02697feb81598cf9069a94ea21637329c59bf3955ab731860c2",
-            "7901803e4e1f43b71379ab2657057fc8545977dc4b5f6cbda225c965c4d1c849",
-            "7c43f3e9c7b8ef76798616f47f26cb7e514b7d7216e2e934e366c5eb7266339d",
-            "7f2ee648660870a37590aafa87d1d5636bdddea816f5c386770961f6724fb495",
-            "8b73208759cd38d30f92e167303c95774902d0554e704b7f64bcbde96ec0d00e",
-            "8ec2c4adff08b0297d741164d97068f8f561c18923f28a042382e742be45996c",
-            "9057f730adf6c4b43959e687df737ed7c84618b62567853161ee45cbb688ba21",
-            "9d4eceb46db57f78273b82f5c7e2139b1386b264a1b18703f3d247b5310886dc",
-            "ac30fbcf6678b2b5d3f278a37fb3785adcc1a0791cac4328acd7a86cada649ad",
-            "ba0f4987395c485a886948b2d4d527e7a0cf6382feb245bde7ef39ac8cae0435",
-            "c95ad1a22c65a26798da6407ccf29373b4ff999b0b4d4d4828f803bff7405529",
-            "cd0c26aa8cad0a2c40e96abccad393a2f9a55742c651724081168c2425acd7a2",
-            "d393c9ee0d6653bafac4c34990cffbc414f57ee1ae11a01669b0ae0b8fcdb97f",
-            "ef01d9a74ff40330527608d5ff5434c22664a7a3f639949b281646ad6bfd28f5",
-            "f5753bdada7c6202759859b13c320ce9830aea66fcd49e63721d2b3dca0c45bb",
+            # "00de9bb518f39464b6b5bb7254d6fdd6e2e2e1fa46710ffe84a6863dca4be950",
+            # "0166d9b3f20fa5a4f6bd9d6d001f8b81b24665a6368dd0c10ed3d8a9e30dd691",
+            # "04bb9872050b5a73939ae9734a7a1f6935df7b6623f03dc407f3403d52392aa6",
+            # "04bc67afae7e1c9113cbbd83e98df59f252ba7757ad90d2c8856f227e5cd8beb",
+            # "0525ec05617fc357460ca247faa0b0be9b2caedc8b2663680f852b93541831b6",
+            # "111eba9400e08e9e0a5a257aae5c3d36c3c63dd383005a3ca65cbb4d884d8346",
+            # "1c3968e8cc47ae26ed907f561ccd55dedbbad3c6645f289fe964582ba864bddd",
+            # "20ecf1d1b0602973c2449ed90428bc31847ab613749ffc5d7ce92c5e05788f27",
+            # "230edb119aff067fecd3586eb3ce857f9ce402b0867037c156efaaaa32d0ba4b",
+            # "2a6e4009dac571c6d4e8b58009acd58a0c0ea1d859f21ac518cf82f2d52a5eda",
+            # "326f6533357ab6e301abf9731667626678ccfa078497c866e12df4ff1f652e8f",
+            # "4289acbeebf1a459a5339c0f3ed89268ae9437541e5fcce8cd3fa1862517e19a",
+            # "53473f43fd47f257cab19acbf24ef1b1b7abe75b4cd643a2387cb10c6c4c44ea",
+            # "7612369f2c0ac02697feb81598cf9069a94ea21637329c59bf3955ab731860c2",
+            # "7901803e4e1f43b71379ab2657057fc8545977dc4b5f6cbda225c965c4d1c849",
+            # "7c43f3e9c7b8ef76798616f47f26cb7e514b7d7216e2e934e366c5eb7266339d",
+            # "7f2ee648660870a37590aafa87d1d5636bdddea816f5c386770961f6724fb495",
+            # "8b73208759cd38d30f92e167303c95774902d0554e704b7f64bcbde96ec0d00e",
+            # "8ec2c4adff08b0297d741164d97068f8f561c18923f28a042382e742be45996c",
+            # "9057f730adf6c4b43959e687df737ed7c84618b62567853161ee45cbb688ba21",
+            # "9d4eceb46db57f78273b82f5c7e2139b1386b264a1b18703f3d247b5310886dc",
+            # "ac30fbcf6678b2b5d3f278a37fb3785adcc1a0791cac4328acd7a86cada649ad",
+            # "ba0f4987395c485a886948b2d4d527e7a0cf6382feb245bde7ef39ac8cae0435",
+            # "c95ad1a22c65a26798da6407ccf29373b4ff999b0b4d4d4828f803bff7405529",
+            # "cd0c26aa8cad0a2c40e96abccad393a2f9a55742c651724081168c2425acd7a2",
+            # "d393c9ee0d6653bafac4c34990cffbc414f57ee1ae11a01669b0ae0b8fcdb97f",
+            # "ef01d9a74ff40330527608d5ff5434c22664a7a3f639949b281646ad6bfd28f5",
+            # "f5753bdada7c6202759859b13c320ce9830aea66fcd49e63721d2b3dca0c45bb",
         }
 
         coco = COCO(args.annotations_file)

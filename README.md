@@ -556,7 +556,7 @@ control and checking of calculations):
 
 | Model          | Backbone | Dataset   | mAP / mAP50 / mAP70      | Class agnostic mAP / mAP50 / mAP70 |
 |----------------|----------|-----------|--------------------------|------------------------------------|
-| RF-DETR        | /        | DocLayNet | 0.3422 / 0.4064 / 0.3678 | 0.4910 / 0.6244 / 0.53606          |
+| RF-DETR        | -        | DocLayNet | 0.3422 / 0.4064 / 0.3678 | 0.4910 / 0.6244 / 0.53606          |
 </details>
 
 ## Reading Order
@@ -568,15 +568,17 @@ control and checking of calculations):
 
 ## VLM
 
-| Model     | Type                    | Normalized edit distance |
-|-----------|-------------------------|--------------------------|
-| Docling   | TODO                    | TODO                     |
-| dots.ocr  | TODO                    | TODO                     |
-| GLM-OCR   | TODO                    | TODO                     |
-| Marker    | TODO                    | TODO                     |
-| MinerU    | MinerU2.5-Pro-2604-1.2B | 0.268333333              |
-| PaddleOCR | TODO                    | TODO                     |
+| Model         | Type                    | Text block NED    | Reading order NED |
+|---------------|-------------------------|-------------------|-------------------|
+| DeepSeekOCR-2 | -                       | 0.188             | 0.115             |
+| Docling       | Default                 | 0.0664            | 0.164             |
+| dots.ocr      | dots.mocr               | **0.0420**        | **0.0765**        |
+| GLM-OCR       | TODO                    | TODO              | TODO              |
+| Marker        | Default                 | <ins>0.0461</ins> | <ins>0.1033</ins> |
+| MinerU        | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
+| PaddleOCR     | PaddleOCR-VL-1.6        | 0.115             | 0.170             |
 
+NED - Normalized edit distance
 
 # Demo
 
