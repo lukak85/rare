@@ -183,3 +183,19 @@ def kendall_tau(a: List[int], b: List[int]) -> float: # TODO: a: list[int], b: l
     total_b = concordant + discordant + ties_b
     denom = (total_a * total_b) ** 0.5
     return (concordant - discordant) / denom if denom > 0 else 0.0
+
+def edit_distance(a, b):
+    """Levenshtein distance between two sequences."""
+    m, n = len(a), len(b)
+    dp = list(range(n + 1))
+    for i in range(1, m + 1):
+        prev, dp[0] = dp[0], i
+        for j in range(1, n + 1):
+            cur = dp[j]
+            dp[j] = prev if a[i-1] == b[j-1] else 1 + min(prev, dp[j-1], dp[j])
+            prev = cur
+    return dp[n]
+
+def normalized_edit_distance(a, b):
+    denom = max(len(a), len(b))
+    return edit_distance(a, b) / denom if denom else 0.0

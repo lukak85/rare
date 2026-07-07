@@ -21,6 +21,7 @@ from rare.evaluate.pipeline_eval import (
     aggregate as pipeline_aggregate,
     score_layout,
     score_order,
+    score_order_gt,
 )
 from rare.evaluate.report import write_report
 from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
@@ -164,6 +165,21 @@ def run_pipeline(
             if sample.ground_order is not None:
                 row.update(score_order(
                     predicted, predicted_order, sample.ground_layout, sample.ground_order
+                ))
+                # Reading order on GT boxes directly: run the order model over the
+                # ground-truth layout so the score isolates ordering quality from
+                # detection quality (no IoU matching, abandon regions excluded).
+                gt_predicted_order = order.order(
+                    sample.ground_layout,
+                    image=image,
+                    page_no=sample.page_no,
+                    pdf_stem=sample.pdf_stem,
+                )
+                # Store both permutations (over the SAME ground-truth boxes) so
+                # the GT-direct reading order can be compared side by side.
+                row.update(score_order_gt(
+                    sample.ground_layout, sample.ground_order, gt_predicted_order,
+                    gt_category_map=gt_category_map,
                 ))
             per_image.append(row)
 

@@ -561,9 +561,9 @@ control and checking of calculations):
 
 ## Reading Order
 
-| Model                     | Backbone | Normalized edit distance |
-|---------------------------|----------|--------------------------|
-| PaddleX's Improved XY-Cut | -        | TODO                     |
+| Model                     | Normalized edit distance | Kendall Tau |
+|---------------------------|--------------------------|-------------|
+| PaddleX's Improved XY-Cut | 0.2411                   | 0.8107      |
 
 
 ## VLM

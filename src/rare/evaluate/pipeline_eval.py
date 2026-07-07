@@ -5,15 +5,33 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from rare.evaluate._matching import match_by_iou
-from rare.utils.evalutils import mean_average_precision, kendall_tau
+from rare.utils.evalutils import (
+    mean_average_precision,
+    kendall_tau,
+    normalized_edit_distance,
+)
+from rare.evaluate.omnidocbench import _resolve_map
 
 if TYPE_CHECKING:
     import layoutparser as lp
 
 
 LAYOUT_METRICS = {"map", "map_50", "map_75", "map_cat", "map_50_cat", "map_75_cat"}
-ORDER_METRICS = {"kendall_tau", "matched_pairs"}
-METRICS = LAYOUT_METRICS | ORDER_METRICS
+ORDER_METRICS = {"kendall_tau", "edit_distance", "matched_pairs"}
+# Reading order scored on ground-truth boxes directly (detection quality removed).
+ORDER_GT_METRICS = {"edit_distance_gt", "kendall_tau_gt", "order_regions_gt"}
+METRICS = LAYOUT_METRICS | ORDER_METRICS | ORDER_GT_METRICS
+
+# Region categories that carry no position in the linear reading flow and are
+# dropped before scoring reading order. A region is excluded when *either* its
+# raw label (as listed below, e.g. GlasbenaMladina COCO names) *or* its
+# OmniDocBench `category_type` (after translation through the category map) is
+# in this set — so you may list raw labels for fine-grained control, or a whole
+# category_type (e.g. "abandon", "figure") to drop a group at once.
+DEFAULT_ORDER_EXCLUDE = frozenset({
+    "Header", "Footer", "PageNum", "Footnote", "MarginNote", "Abandon", "Advertisement",
+    "Figure", "Caption", "Form", "FigByL", "FigByline"
+})
 
 
 def score_layout(
@@ -91,8 +109,72 @@ def score_order(
 
     return {
         "kendall_tau":   kendall_tau(pred_ranks, ground_ranks), # TODO - check
-        "edit_distance": None, # TODO - implementation of normalized Levenshtein distance
+        "edit_distance": normalized_edit_distance(pred_ranks, ground_ranks), # TODO - implementation of normalized Levenshtein distance
         "matched_pairs": float(len(matched)),
+    }
+
+
+def score_order_gt(
+    ground: "lp.Layout",
+    ground_order: list[int],
+    predicted_order: list[int],
+    gt_category_map: Optional[dict[str, str]] = None,
+    exclude_categories: Optional[set[str]] = None,
+) -> dict[str, float]:
+    """Reading-order quality scored on the *ground-truth* boxes directly.
+
+    Unlike `score_order`, this feeds the ground-truth boxes (not the detector's
+    output) to the reading-order model, so no IoU matching is needed and the
+    result is not confounded by detection quality — it isolates the ordering
+    model. Both `ground_order` and `predicted_order` are permutations over the
+    same `ground` boxes (`ground[order[k]]` is the k-th region), so the metric
+    is the normalized edit distance between the two index sequences.
+
+    Regions that don't belong to the linear reading flow (page numbers, figures,
+    figure captions, headers/footers, adverts, forms, …) are dropped from *both*
+    sequences before scoring. A region is excluded when *either* its raw label
+    *or* its OmniDocBench `category_type` (via `gt_category_map`, defaulting to
+    the OmniDocBench map) is in `exclude_categories` — so raw GlasbenaMladina
+    names like "PageNum"/"Figure" and whole category_types like "abandon"/
+    "figure" both work. Defaults to `DEFAULT_ORDER_EXCLUDE`.
+
+    Returns:
+        edit_distance_gt: normalized Levenshtein distance in [0, 1]; 0 is a
+            perfect ordering.
+        kendall_tau_gt: Kendall's tau on the surviving regions' ranks (for
+            parity with `score_order`).
+        order_regions_gt: number of regions scored after exclusion.
+    """
+    exclude = DEFAULT_ORDER_EXCLUDE if exclude_categories is None else exclude_categories
+    cmap = _resolve_map(gt_category_map)
+    excluded = {
+        i for i, block in enumerate(ground)
+        if block.type in exclude or cmap.get(block.type, block.type) in exclude
+    }
+    gt_seq = [i for i in ground_order if i not in excluded]
+    pred_seq = [i for i in predicted_order if i not in excluded]
+
+    if len(gt_seq) < 2:
+        return {
+            "edit_distance_gt": 0.0,
+            "kendall_tau_gt":   1.0,
+            "order_regions_gt": float(len(gt_seq)),
+            "ground_order": gt_seq,
+            "predicted_order_gt": pred_seq,
+        }
+
+    gt_rank = {gi: r for r, gi in enumerate(gt_seq)}
+    pred_rank = {pi: r for r, pi in enumerate(pred_seq)}
+    common = [i for i in gt_seq if i in pred_rank]
+    gt_ranks = [gt_rank[i] for i in common]
+    pred_ranks = [pred_rank[i] for i in common]
+
+    return {
+        "edit_distance_gt": normalized_edit_distance(pred_seq, gt_seq),
+        "kendall_tau_gt":   kendall_tau(pred_ranks, gt_ranks),
+        "order_regions_gt": float(len(gt_seq)),
+        "ground_order": gt_seq,
+        "predicted_order_gt": pred_seq,
     }
 
 

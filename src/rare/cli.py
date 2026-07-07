@@ -353,7 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--run-omnidocbench",
         dest="run_omnidocbench",
         action="store_true",
-        default=True,
+        default=False,
         help="Evaluate using OmniDocBench.",
     )
     p_eval.add_argument(
