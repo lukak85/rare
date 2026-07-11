@@ -17,19 +17,24 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp
 @register("vlm", "gemma")
 class GemmaBackend:
 
-    def __init__(self, config: dict | None = None, base_url: str = None, api_key: str = None):
+    def __init__(self, config: dict | None = None, base_url: str = None, api_key: str = None, cuda_device: int = 3):
         self.model_name = None
 
         self._processor = None
         self._model = None
+        
+        self.pretrained_model_name = "google/gemma-4-E2B-it"
+
+        import torch
+        self.cuda_device = torch.device(f"cuda:{cuda_device}")
 
     def _get_model(self):
         if self._model is None:
             self._model = AutoModelForImageTextToText.from_pretrained(
-                "google/gemma-4-E2B-it",
-                device_map="auto",
+                self.pretrained_model_name,
+                dtype="auto",
                 attn_implementation="sdpa"
-            )
+            ).to(self.cuda_device).eval()
         return self._model
 
     def _get_processor(self):
@@ -86,10 +91,10 @@ class GemmaBackend:
             return_dict=True,
             return_tensors="pt",
             add_generation_prompt=True,
-        ).to(self._get_model().device)
+        ).to(self.cuda_device)
         input_len = inputs["input_ids"].shape[-1]
 
-        output = self._get_model().generate(**inputs, max_new_tokens=50, cache_implementation="static")
+        output = self._get_model().generate(**inputs, max_new_tokens=4096)
 
         rel = image_path.relative_to(image_dir)
         output_path = result_dir / rel.with_suffix(".md")

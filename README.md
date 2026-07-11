@@ -176,18 +176,18 @@ The supported models (and therefore given Python version recommendations) were t
 
 ### VLM track
 
-| Model                                                                      | CLI name      | Type               | Recommended Python version |
-|----------------------------------------------------------------------------|---------------|--------------------|----------------------------|
-| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**        | `deepseekocr` | Specialized VLMs   | 3.12.9                     |
-| **[Docling](https://github.com/docling-project/docling)**                  | `docling`     | Specialized VLMs   | 3.14                       |
-| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                  | `dots-ocr`    | Specialized VLMs   | 3.12                       |
-| **[Gemma4](https://huggingface.co/docs/transformers/en/model_doc/gemma4)** | `gemma`       | Local general VLMs | 3.13                       |
-| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                          | `glm-ocr`     | Specialized VLMs   | 3.13                       |
-| **[Marker](https://github.com/datalab-to/marker)**                         | `marker`      | Specialized VLMs   | 3.10                       |
-| **[MinerU](https://github.com/opendatalab/mineru)**                        | `mineru`      | Specialized VLMs   | 3.13                       |
-| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**                 | `paddleocr`   | Specialized VLMs   | 3.12                       |
-| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**           | `paddleocr`   | Local general VLMs | 3.12                       |
-| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**             | `youtu`       | Specialized VLMs   | 3.10                       |
+| Model                                                                               | CLI name         | Type               | Recommended Python version |
+|-------------------------------------------------------------------------------------|------------------|--------------------|----------------------------|
+| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**                 | `deepseekocr`    | Specialized VLMs   | 3.12.9                     |
+| **[Docling](https://github.com/docling-project/docling)**                           | `docling`        | Specialized VLMs   | 3.14                       |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                           | `dots-ocr`       | Specialized VLMs   | 3.12                       |
+| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                                   | `glm-ocr`        | Specialized VLMs   | 3.13                       |
+| **[Marker](https://github.com/datalab-to/marker)**                                  | `marker`         | Specialized VLMs   | 3.10                       |
+| **[MinerU](https://github.com/opendatalab/mineru)**                                 | `mineru`         | Specialized VLMs   | 3.13                       |
+| **[Nemotron-Parse-v1.2](https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.2)** | `nemotron-parse` | Specialized VLMs   | 3.13                       |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**                          | `paddleocr`      | Specialized VLMs   | 3.12                       |
+| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**                    | `paddleocr`      | Local general VLMs | 3.12                       |
+| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**                      | `youtu`          | Specialized VLMs   | 3.10                       |
 
 ## Outputs
 
@@ -592,16 +592,17 @@ control and checking of calculations):
 
 ### Specialized VLMs:
 
-| Model         | Type                    | Text block NED    | Reading order NED |
-|---------------|-------------------------|-------------------|-------------------|
-| DeepSeekOCR-2 | -                       | 0.188             | 0.115             |
-| Docling       | Default                 | 0.0664            | 0.164             |
-| dots.ocr      | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
-| GLM-OCR       | GLM-4V                  | 0.1379*           | 0.1941*           |
-| Marker        | Default                 | 0.0461            | 0.1033            |
-| MinerU        | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
-| PaddleOCR     | PaddleOCR-VL-1.6        | 0.115             | 0.170             |
-| Youtu-Parsing | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
+| Model               | Type                    | Text block NED    | Reading order NED |
+|---------------------|-------------------------|-------------------|-------------------|
+| DeepSeekOCR-2       | -                       | 0.188             | 0.115             |
+| Docling             | Default                 | 0.0664            | 0.164             |
+| dots.ocr            | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
+| GLM-OCR             | GLM-4V                  | 0.1379*           | 0.1941*           |
+| Marker              | Default                 | 0.0461            | 0.1033            |
+| MinerU              | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
+| Nemotron-Parse-v1.2 | -                       | 0.0461            | 0.1033            |
+| PaddleOCR           | PaddleOCR-VL-1.6        | 0.115             | 0.170             |
+| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
 
 \* Only results successfully parsed were scored against ground truth.
 
@@ -612,7 +613,6 @@ control and checking of calculations):
 | ChatGPT  | GPT 5.6              | TODO           | TODO              |
 | Claude   | Opus 4.8             | TODO           | TODO              |
 | Claude   | Fable 5              | TODO           | TODO              |
-| Gemma4   | gemma-4-E2B-it       | TODO           | TODO              |
 | Gemini   | Gemini 3 Pro         | TODO           | TODO              |
 | Ovis2.6  | Ovis2.6-30B-A3B      | TODO           | TODO              |
 | Qwen3-VL | Qwen3-VL-8B-Instruct | TODO           | TODO              |
