@@ -176,17 +176,17 @@ The supported models (and therefore given Python version recommendations) were t
 
 ### VLM track
 
-| Model                                                              | CLI name    | Type             | Recommended Python version |
-|--------------------------------------------------------------------|-------------|------------------|----------------------------|
-| **[Youtu-Parsing](https://github.com/deepseek-ai/DeepSeek-OCR-2)** | `youtu`     | Specialized VLMs | 3.12.9                     |
-| **[Docling](https://github.com/docling-project/docling)**          | `docling`   | Specialized VLMs | 3.14                       |
-| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**          | `dots-ocr`  | Specialized VLMs | 3.12                       |
-| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                  | `glm-ocr`   | Specialized VLMs | 3.13                       |
-| **[Marker](https://github.com/datalab-to/marker)**                 | `marker`    | Specialized VLMs | 3.10                       |
-| **[MinerU](https://github.com/opendatalab/mineru)**                | `mineru`    | Specialized VLMs | 3.13                       |
-| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**         | `paddleocr` | Specialized VLMs | 3.12                       |
-| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**   | `paddleocr` | General VLMs     | 3.12                       |
-| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**     | `youtu`     | Specialized VLMs | 3.10                       |
+| Model                                                               | CLI name      | Type             | Recommended Python version |
+|---------------------------------------------------------------------|---------------|------------------|----------------------------|
+| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)** | `deepseekocr` | Specialized VLMs | 3.12.9                     |
+| **[Docling](https://github.com/docling-project/docling)**           | `docling`     | Specialized VLMs | 3.14                       |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**           | `dots-ocr`    | Specialized VLMs | 3.12                       |
+| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                   | `glm-ocr`     | Specialized VLMs | 3.13                       |
+| **[Marker](https://github.com/datalab-to/marker)**                  | `marker`      | Specialized VLMs | 3.10                       |
+| **[MinerU](https://github.com/opendatalab/mineru)**                 | `mineru`      | Specialized VLMs | 3.13                       |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**          | `paddleocr`   | Specialized VLMs | 3.12                       |
+| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**    | `paddleocr`   | General VLMs     | 3.12                       |
+| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**      | `youtu`       | Specialized VLMs | 3.10                       |
 
 ## Outputs
 
@@ -572,13 +572,16 @@ control and checking of calculations):
 |---------------|-------------------------|-------------------|-------------------|
 | DeepSeekOCR-2 | -                       | 0.188             | 0.115             |
 | Docling       | Default                 | 0.0664            | 0.164             |
-| dots.ocr      | dots.mocr               | **0.0420**        | **0.0765**        |
-| GLM-OCR       | TODO                    | TODO              | TODO              |
-| Marker        | Default                 | <ins>0.0461</ins> | <ins>0.1033</ins> |
+| dots.ocr      | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
+| GLM-OCR       | GLM-4V                  | 0.1379*           | 0.1941*           |
+| Marker        | Default                 | 0.0461            | 0.1033            |
 | MinerU        | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
 | PaddleOCR     | PaddleOCR-VL-1.6        | 0.115             | 0.170             |
+| Youtu-Parsing | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
 
-NED - Normalized edit distance
+\* Only results successfully parsed were scored against ground truth.
+
+**Note**: NED - Normalized edit distance
 
 # Demo
 
@@ -600,7 +603,8 @@ Top priority:
   - [ ] DeepSeek V3
 - [ ] Evaluate all models: 
   - [x] Pipeline
-  - [ ] VLM
+  - [x] Specialized VLM
+  - [ ] General VLM
 
 Lower priority:
 - [ ] Add support for Paragraph2Graph, M2Doc

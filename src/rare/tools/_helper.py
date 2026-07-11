@@ -195,7 +195,7 @@ def visualize_annotations(coco, image_id, save_path=None, visualize_text=False, 
     # drawing on; rescale boxes from their stored size to the actual image size
     # (a no-op when they already match).
     dst_h, dst_w = display_img.shape[:2]
-    anns = scale_coco_annotations(anns, (img_info["width"], img_info["height"]), (dst_w, dst_h))
+    # anns = scale_coco_annotations(anns, (img_info["width"], img_info["height"]), (dst_w, dst_h))
     layout = load_coco_annotations(anns, categories=coco.cats)
     positions = None
     if visualize_text:
