@@ -176,18 +176,18 @@ The supported models (and therefore given Python version recommendations) were t
 
 ### VLM track
 
-| Model                                                                               | CLI name         | Type               | Recommended Python version |
-|-------------------------------------------------------------------------------------|------------------|--------------------|----------------------------|
-| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**                 | `deepseekocr`    | Specialized VLMs   | 3.12.9                     |
-| **[Docling](https://github.com/docling-project/docling)**                           | `docling`        | Specialized VLMs   | 3.14                       |
-| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                           | `dots-ocr`       | Specialized VLMs   | 3.12                       |
-| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                                   | `glm-ocr`        | Specialized VLMs   | 3.13                       |
-| **[Marker](https://github.com/datalab-to/marker)**                                  | `marker`         | Specialized VLMs   | 3.10                       |
-| **[MinerU](https://github.com/opendatalab/mineru)**                                 | `mineru`         | Specialized VLMs   | 3.13                       |
-| **[Nemotron-Parse-v1.2](https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.2)** | `nemotron` | Specialized VLMs   | 3.13                       |
-| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**                          | `paddleocr`      | Specialized VLMs   | 3.12                       |
-| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**                    | `paddleocr`      | Local general VLMs | 3.12                       |
-| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**                      | `youtu`          | Specialized VLMs   | 3.10                       |
+| Model                                                                               | CLI name      | Type               | Recommended Python version |
+|-------------------------------------------------------------------------------------|---------------|--------------------|----------------------------|
+| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**                 | `deepseekocr` | Specialized VLMs   | 3.12.9                     |
+| **[Docling](https://github.com/docling-project/docling)**                           | `docling`     | Specialized VLMs   | 3.14                       |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                           | `dots-ocr`    | Specialized VLMs   | 3.12                       |
+| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                                   | `glm-ocr`     | Specialized VLMs   | 3.13                       |
+| **[Marker](https://github.com/datalab-to/marker)**                                  | `marker`      | Specialized VLMs   | 3.10                       |
+| **[MinerU](https://github.com/opendatalab/mineru)**                                 | `mineru`      | Specialized VLMs   | 3.13                       |
+| **[Nemotron-Parse-v1.2](https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.2)** | `nemotron`    | Specialized VLMs   | 3.13                       |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**                          | `paddleocr`   | Specialized VLMs   | 3.12                       |
+| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**                    | `paddleocr`   | Local general VLMs | 3.12                       |
+| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**                      | `youtu`       | Specialized VLMs   | 3.10                       |
 
 ## Outputs
 
