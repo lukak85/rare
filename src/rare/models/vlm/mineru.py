@@ -27,8 +27,10 @@ import json
 import os
 from pathlib import Path
 
+from mineru_vl_utils import MinerUClient, MinerULogitsProcessor
 from PIL import Image
 from tqdm import tqdm
+from vllm import LLM
 
 from rare.doc.schema import GlasanaDocument
 from rare.models.registry import register
@@ -52,8 +54,15 @@ class MinerUBackend:
 
     def __init__(self, config: dict | None = None):
         cfg = config or {}
-        self.model_path = cfg.get("model_path", _DEFAULT_MODEL_PATH)
+        # self.model_path = cfg.get("model_path", _DEFAULT_MODEL_PATH)
         self.backend = cfg.get("backend", "vllm-engine")
+        self.llm = LLM(
+            model=_DEFAULT_MODEL_PATH,
+            logits_processors=[MinerULogitsProcessor],  # drop this line if vllm < 0.10.1
+            gpu_memory_utilization=0.7,   # 0.7 × 22.04 ≈ 15.4 GiB
+            # enforce_eager=True,         # optional: skips CUDA-graph capture, frees more VRAM
+            # max_model_len=16384,        # optional: smaller KV cache if still tight
+        )
         self.handle_equation_block = bool(cfg.get("handle_equation_block", False))
         self.dpi = int(cfg.get("dpi", 200))  # PDF render DPI for parse_pdf
         self.label_map = {**MINERU_LABEL_MAP, **(cfg.get("label_overrides") or {})}
@@ -67,8 +76,7 @@ class MinerUBackend:
 
             self._client = MinerUClient(
                 backend=self.backend,
-                model_path=self.model_path,
-                handle_equation_block=self.handle_equation_block,
+                vllm_llm=self.llm
             )
         return self._client
 

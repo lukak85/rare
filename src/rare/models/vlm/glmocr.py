@@ -62,13 +62,13 @@ class GLMOCRBackend:
         # vLLM OpenAI-compatible endpoint. `base_url` must end in /v1; `model`
         # must match `curl {base_url}/models` (case-sensitive). `api_key` is
         # ignored by local vLLM but must be a non-empty string.
-        self.base_url = cfg.get("base_url", "http://localhost:8000/v1")
+        self.base_url = cfg.get("base_url", "http://localhost:9080/v1")
         self.model = cfg.get("model", "zai-org/GLM-OCR")
         self.api_key = cfg.get("api_key", "EMPTY")
         self.prompt = cfg.get("prompt", self.OCR_PROMPT)
         self.max_tokens = int(cfg.get("max_tokens", 8192))
         self.temperature = float(cfg.get("temperature", 0.0))  # deterministic
-        self.dpi = int(cfg.get("dpi", 200))
+        self.dpi = int(cfg.get("dpi", 300))
         self.num_thread = int(cfg.get("num_thread", 16))
         self._client = None  # built lazily on first use
 
@@ -104,6 +104,10 @@ class GLMOCRBackend:
             ],
             max_tokens=self.max_tokens,
             temperature=self.temperature,
+            extra_body={
+                "repetition_penalty": 1.08,   # 1.05–1.15; logit penalty, works with greedy
+                "no_repeat_ngram_size": 3,    # hard-blocks any repeated 3-gram loop
+            },
         )
         return response.choices[0].message.content or ""
 
@@ -188,7 +192,7 @@ class GLMOCRBackend:
 
                 # Replaces the cloud `client.layout_parsing.create(...)` call with the
                 # OpenAI-compatible chat endpoint that vLLM actually serves.
-                response = client.chat.completions.create(
+                response = self._get_client().chat.completions.create(
                     model=model,
                     messages=[
                         {
@@ -201,6 +205,10 @@ class GLMOCRBackend:
                     ],
                     max_tokens=max_tokens,
                     temperature=0.0,  # deterministic output for benchmarking
+                    extra_body={
+                        "repetition_penalty": 1.08,   # 1.05–1.15; logit penalty, works with greedy
+                        "no_repeat_ngram_size": 3,    # hard-blocks any repeated 3-gram loop
+                    }
                 )
 
                 # vLLM returns chat-completion shape, not the cloud's `.md_results`.
@@ -254,7 +262,7 @@ class GLMOCRBackend:
         output_folder = self.process_images_to_markdown(
             image_folder_path=image_dir,
             markdown_folder_path=out_md_dir,
-            base_url="http://localhost:8080/v1",  # match your `vllm serve --port`
+            base_url="http://localhost:9080/v1",  # match your `vllm serve --port`
             model="zai-org/GLM-OCR",  # must match `curl .../v1/models`
         )
         return out_md_dir

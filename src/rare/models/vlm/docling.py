@@ -55,6 +55,9 @@ class DoclingBackend:
         cfg = config or {}
         self.page_break_marker = cfg.get("page_break_marker", _DEFAULT_PAGE_BREAK)
         self._converter = None  # built lazily on first use
+        self._use_vlm = False # True
+
+        self.versbose = True
 
     def _get_converter(self):
         """Build the DocumentConverter on first use (lazy import keeps
@@ -62,7 +65,18 @@ class DoclingBackend:
         if self._converter is None:
             from docling.document_converter import DocumentConverter
 
-            self._converter = DocumentConverter()
+            if self._use_vlm:
+                from docling.datamodel.base_models import InputFormat
+                from docling.document_converter import PdfFormatOption
+                from docling.pipeline.vlm_pipeline import VlmPipeline
+
+                self._converter = DocumentConverter(
+                    format_options={
+                        InputFormat.PDF: PdfFormatOption(pipeline_cls=VlmPipeline),
+                    }
+                )
+            else:
+                self._converter = DocumentConverter()
         return self._converter
 
     # --- faithful reference port -------------------------------------------
