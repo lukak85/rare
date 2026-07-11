@@ -176,17 +176,18 @@ The supported models (and therefore given Python version recommendations) were t
 
 ### VLM track
 
-| Model                                                               | CLI name      | Type             | Recommended Python version |
-|---------------------------------------------------------------------|---------------|------------------|----------------------------|
-| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)** | `deepseekocr` | Specialized VLMs | 3.12.9                     |
-| **[Docling](https://github.com/docling-project/docling)**           | `docling`     | Specialized VLMs | 3.14                       |
-| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**           | `dots-ocr`    | Specialized VLMs | 3.12                       |
-| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                   | `glm-ocr`     | Specialized VLMs | 3.13                       |
-| **[Marker](https://github.com/datalab-to/marker)**                  | `marker`      | Specialized VLMs | 3.10                       |
-| **[MinerU](https://github.com/opendatalab/mineru)**                 | `mineru`      | Specialized VLMs | 3.13                       |
-| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**          | `paddleocr`   | Specialized VLMs | 3.12                       |
-| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**    | `paddleocr`   | General VLMs     | 3.12                       |
-| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**      | `youtu`       | Specialized VLMs | 3.10                       |
+| Model                                                                      | CLI name      | Type               | Recommended Python version |
+|----------------------------------------------------------------------------|---------------|--------------------|----------------------------|
+| **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**        | `deepseekocr` | Specialized VLMs   | 3.12.9                     |
+| **[Docling](https://github.com/docling-project/docling)**                  | `docling`     | Specialized VLMs   | 3.14                       |
+| **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                  | `dots-ocr`    | Specialized VLMs   | 3.12                       |
+| **[Gemma4](https://huggingface.co/docs/transformers/en/model_doc/gemma4)** | `gemma`       | Local general VLMs | 3.13                       |
+| **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                          | `glm-ocr`     | Specialized VLMs   | 3.13                       |
+| **[Marker](https://github.com/datalab-to/marker)**                         | `marker`      | Specialized VLMs   | 3.10                       |
+| **[MinerU](https://github.com/opendatalab/mineru)**                        | `mineru`      | Specialized VLMs   | 3.13                       |
+| **[PaddleOCR](https://github.com/PADDLEPADDLE/PADDLEOCR)**                 | `paddleocr`   | Specialized VLMs   | 3.12                       |
+| **[Qwen3-VL](https://huggingface.co/collections/Qwen/qwen3-vl)**           | `paddleocr`   | Local general VLMs | 3.12                       |
+| **[Youtu-Parsing](https://github.com/PADDLEPADDLE/PADDLEOCR)**             | `youtu`       | Specialized VLMs   | 3.10                       |
 
 ## Outputs
 
@@ -220,9 +221,9 @@ rare/                         # installable package — entry point: rare = "rar
 ├── models/
 │   ├── base.py               # LayoutBackend / ReadingOrderBackend / VLMBackend protocols
 │   ├── registry.py           # lazy registry; sets LAYOUTPARSER_BACKEND env var
-│   ├── layout/               # 15 layout adapters (one file per LP model family)
-│   ├── order/builtin.py      # top-bottom
-│   └── vlm/                  # !!!WIP!!!
+│   ├── layout/               # layout detection model/method classes
+│   ├── order/builtin.py      # order detection model/method classes
+│   └── vlm/                  # visual language model document parsing classes
 ├── parse/                    # PDF → pages → layout → order → text → GlasanaDocument
 ├── evaluate/                 # dataset loaders + pipeline/VLM metrics + runner + report
 ├── tools/_helper.py          # annotation utilities
@@ -510,16 +511,37 @@ TODO
 
 https://ai.google.dev/gemini-api/docs/document-processing
 
+### Gemma 4
+
+Installation of gemma only requires the installation of `transformers` library:
+```bash
+pip install -U transformers
+```
+
+For use with cuda, e.g. on a device with CUDA 12.8 support, use:
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+```
+
 ### GPT
 
 TODO
 
-</details>
-
-
-## Qwen3-VL
+### Qwen3-VL
 
 Follow the instructions of model of choice on [Qwen3-VL's Hugging Face repository](https://huggingface.co/collections/Qwen/qwen3-vl).
+
+Our tests were done with the following model and command:
+```bash
+vllm serve Qwen/Qwen3-VL-8B-Instruct \
+  --gpu-memory-utilization 0.95 \
+  --max-model-len 12288 \ 
+  --max-num-seqs 2 \
+  --limit-mm-per-prompt '{"image": 1}' \
+  --mm-processor-kwargs '{"max_pixels": 1003520}'
+```
+
+</details>
 
 ## Evaluation
 
@@ -568,6 +590,8 @@ control and checking of calculations):
 
 ## VLM
 
+### Specialized VLMs:
+
 | Model         | Type                    | Text block NED    | Reading order NED |
 |---------------|-------------------------|-------------------|-------------------|
 | DeepSeekOCR-2 | -                       | 0.188             | 0.115             |
@@ -580,6 +604,18 @@ control and checking of calculations):
 | Youtu-Parsing | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
 
 \* Only results successfully parsed were scored against ground truth.
+
+### General VLMs
+
+| Model    | Type                 | Text block NED | Reading order NED |
+|----------|----------------------|----------------|-------------------|
+| ChatGPT  | GPT 5.6              | TODO           | TODO              |
+| Claude   | Opus 4.8             | TODO           | TODO              |
+| Claude   | Fable 5              | TODO           | TODO              |
+| Gemma4   | gemma-4-E2B-it       | TODO           | TODO              |
+| Gemini   | Gemini 3 Pro         | TODO           | TODO              |
+| Ovis2.6  | Ovis2.6-30B-A3B      | TODO           | TODO              |
+| Qwen3-VL | Qwen3-VL-8B-Instruct | TODO           | TODO              |
 
 **Note**: NED - Normalized edit distance
 
