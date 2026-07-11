@@ -55,6 +55,7 @@ _DEFERRED: dict[str, dict[str, str]] = {
         "dots-ocr":             "rare.models.vlm.dotsocr",
         "glm-ocr":              "rare.models.vlm.glmocr",
         "mineru":               "rare.models.vlm.mineru",
+        "nemotron":             "rare.models.vlm.nemotron",
         "paddleocr":            "rare.models.vlm.paddleocr",
         "marker":               "rare.models.vlm.marker",
         "youtu":                "rare.models.vlm.youtu",
