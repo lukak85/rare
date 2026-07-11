@@ -511,18 +511,6 @@ TODO
 
 https://ai.google.dev/gemini-api/docs/document-processing
 
-### Gemma 4
-
-Installation of gemma only requires the installation of `transformers` library:
-```bash
-pip install -U transformers
-```
-
-For use with cuda, e.g. on a device with CUDA 12.8 support, use:
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-```
-
 ### GPT
 
 TODO
