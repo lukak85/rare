@@ -63,7 +63,9 @@ _DEFERRED: dict[str, dict[str, str]] = {
         "deepseek":             "rare.models.vlm.depseek",
         "gemini":               "rare.models.vlm.gemini",
         "gpt":                  "rare.models.vlm.gpt",
+
         "qwen":                 "rare.models.vlm.qwen",
+        "gemma":                 "rare.models.vlm.gemma",
     },
 }
 
