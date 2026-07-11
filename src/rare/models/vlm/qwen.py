@@ -31,13 +31,14 @@ class QwenParseBackend:
         self.base_url = base_url if base_url is not None else "http://localhost:8000/v1"
         self.api_key = api_key if api_key is not None else "EMPTY"
         self.model_name = model_name or config.get("model_name")
-        self.timeout = config.get("timeout", 600)
+        self.timeout = config.get("timeout", 300) # 5 seconds
 
     def _get_client(self):
         if self._client is None:
             self._client = OpenAI(
                 base_url=self.base_url,
-                api_key=self.api_key
+                api_key=self.api_key,
+                max_retries=0
             )
         return self._client
 
@@ -87,7 +88,7 @@ class QwenParseBackend:
             stream=True,
             timeout=self.timeout,
             extra_body={
-                "repetition_penalty": 1.08,   # 1.05–1.15; logit penalty, works with greedy
+                "repetition_penalty": 1.05,   # 1.05–1.15; logit penalty, works with greedy
             },
         )
 

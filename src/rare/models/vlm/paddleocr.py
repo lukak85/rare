@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 import shutil
 
-from paddleocr import PPStructureV3
+from paddleocr import PPStructureV3, PaddleOCRVL
 from tqdm import tqdm
 
 from rare.doc.schema import GlasanaDocument
@@ -94,7 +94,8 @@ class PaddleOCRBackend:
 
     def process_folder(self, folder_path, output_dir):
         os.makedirs(output_dir, exist_ok=True)
-        pipeline  = PPStructureV3()
+        # pipeline  = PPStructureV3()
+        pipeline  = PaddleOCRVL(pipeline_version="v1.6")
 
         image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
         image_files = [f for f in os.listdir(folder_path)
@@ -123,7 +124,7 @@ class PaddleOCRBackend:
                     res.save_to_json(oupt_file)
                     res.save_to_markdown(oupt_file, pretty=False)
 
-                print(f"Result save to {oupt_file}")
+                # print(f"Result save to {oupt_file}")
 
                 processing_stats.append({
                     "image": img_file,
@@ -141,6 +142,7 @@ class PaddleOCRBackend:
                 })
 
 
+        """
         print("\nProcessing Statistics:")
         print("=" * 50)
         for stat in processing_stats:
@@ -148,12 +150,15 @@ class PaddleOCRBackend:
             print(f"Status: {stat['status']}")
             print(f"Processing Time: {stat['processing_time']:.2f} seconds")
             print("-" * 50)
+        """
 
-
+        """
         total_time = sum(stat['processing_time'] for stat in processing_stats)
         success_count = sum(1 for stat in processing_stats if stat['status'] == 'success')
         failed_count = len(processing_stats) - success_count
+        """
 
+        """
         print("\nSummary:")
         print("=" * 50)
         print(f"Total Images Processed: {len(processing_stats)}")
@@ -161,6 +166,7 @@ class PaddleOCRBackend:
         print(f"Failed to Process: {failed_count}")
         print(f"Total Processing Time: {total_time:.2f} seconds")
         print(f"Average Processing Time: {total_time/len(processing_stats):.2f} seconds per image")
+        """
 
         return processing_stats
 

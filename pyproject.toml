@@ -37,6 +37,8 @@ vgt = ["timm==0.5.4", "Pillow==8.4.0", "blobfile", "mypy", "numpy", "pytest",
     "requests", "einops", "tensorboard", "scipy", "opencv-python==4.5.1.48", "Shapely==1.8.4", "transformers"]
 
 marker = ["marker-pdf", "pdfplumber<0.11.10", "pillow>=10.2.0,<11.0.0", "pypdfium2==4.30.0"]
+nemotron = ["albumentations", "timm", "open_clip_torch", "accelerate==1.12.0", "albumentations==2.0.8",
+    "transformers==5.6.1", "timm==1.0.22", "beautifulsoup4"]
 
 claude   = ["anthropic"]
 gemini = ["google-genai"]

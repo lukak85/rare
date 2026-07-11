@@ -4,12 +4,8 @@ import os
 from pathlib import Path
 
 from tqdm import tqdm
-from youtu_hf_parser import YoutuOCRParserHF
 
-from rare.doc.schema import GlasanaDocument
 from rare.models.registry import register
-from rare.models.vlm._assembler import assemble_document
-from rare.models.vlm._vlm_schema import VLMDocument, VLMPage, VLMRegion
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 
@@ -17,14 +13,15 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp
 @register("vlm", "youtu")
 class YoutuBackend:
 
-    def __init__(self, config: dict | None = None, model_path=None, angle_correct_model_path=None):
+    def __init__(self, config: dict | None = None):
         self._converter = None  # built lazily on first use
-        self.model_path = model_path
-        self.angle_correct_model_path = angle_correct_model_path
+        if config is not None:
+            self.model_path, self.angle_correct_model_path = config['model_path'], config['angle_correct_model_path']
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # Force everything on the same device
 
     def _get_converter(self):
         if self._converter is None:
+            from youtu_hf_parser import YoutuOCRParserHF
             self._converter = YoutuOCRParserHF(
                 model_path=self.model_path,                    # Path to downloaded model weights
                 enable_angle_correct=True,                # Set to False to disable angle correction
@@ -55,9 +52,26 @@ class YoutuBackend:
         image_paths = self._load_image_paths(image_dir)
 
         for image_path in tqdm(image_paths):
-            self._get_converter().parse_file(
-                input_path=image_path,     # Input document path
-                output_dir=out_md_dir      # Output directory for results
-            )
+            out_md = Path(out_md_dir) / f"{Path(image_path).stem}.md"   # xx_1.jpg -> xx_1.md
+            if skip_existing and out_md.exists():
+                print(f"skipping {out_md}")
+                continue
+            try:
+                self._get_converter().parse_file(
+                    input_path=image_path,     # Input document path
+                    output_dir=out_md_dir      # Output directory for results
+                )
+            except:
+                try:
+                    import re
+                    lower_res_image_path = re.sub(r"/eval_\d+dpi/", "/eval/", image_path)
+                    print(f"Using {lower_res_image_path}")
+                    self._get_converter().parse_file(
+                        input_path=lower_res_image_path,     # Input document path
+                        output_dir=out_md_dir      # Output directory for results
+                    )
+                except:
+                    print("Skipping " + image_path)
+                    pass
 
         return out_md_dir

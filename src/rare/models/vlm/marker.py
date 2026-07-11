@@ -5,8 +5,6 @@ import re
 from pathlib import Path
 import traceback
 
-from tqdm import tqdm
-
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.config.parser import ConfigParser
@@ -58,7 +56,10 @@ class MarkerBackend:
         out_md_dir: str | Path,
         skip_existing: bool = False,
     ) -> str | Path:
-        for pdf_name in tqdm(os.listdir(pdf_dir)):
+        os.environ["DISABLE_TQDM"] = "true"
+        from tqdm import tqdm
+
+        for pdf_name in tqdm(os.listdir(pdf_dir), desc="My documents"):
             rendered = self._get_converter()(os.path.join(pdf_dir, pdf_name))
             text, _, images = text_from_rendered(rendered)
 

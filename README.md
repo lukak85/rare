@@ -476,6 +476,30 @@ In our tests, we encountered the following errors, and fixed them the following 
     ```
 </details>
 
+### Nemotron-Parse
+
+Following the [NVIDIA-Nemotron-Parse-v1.2](https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.2) quick start, in
+addition to `transformers`, install:
+```bash
+pip install albumentations timm open_clip_torch
+```
+
+After running the following download script:
+```bash
+hf download nvidia/NVIDIA-Nemotron-Parse-v1.2 chat_template.jinja --local-dir . 
+```
+
+Run via vLLM:
+```bash
+vllm serve nvidia/NVIDIA-Nemotron-Parse-v1.2 \
+    --dtype bfloat16 \
+    --max-num-seqs 8 \
+    --limit-mm-per-prompt '{"image": 1}' \
+    --trust-remote-code \
+    --port 8000 \
+    --chat-template chat_template.jinja
+```
+
 
 ### PaddleOCR
 
