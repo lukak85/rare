@@ -11,5 +11,23 @@ class NemotronBackend:
         import layoutparser as lp
         self._model = lp.NemotronLayoutModel(**config) if config else lp.NemotronLayoutModel()
 
+        self.pred_category_map = {
+            "table": "table",
+            "chart": "figure",
+            "title": "title",
+            "infographic": "figure",
+            "text": "text_block",
+            "header_footer": "header",
+        }
+
+        self.label_map = {
+            0: "table",
+            1: "chart",
+            2: "title",
+            3: "infographic",
+            4: "text",
+            5: "header_footer",
+        }
+
     def detect(self, image):
         return self._model.detect(image)

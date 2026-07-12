@@ -38,7 +38,7 @@ _DEFERRED: dict[str, dict[str, str]] = {
         #"docstrum":        "rare.models.layout.classical",
         #"rlsa":            "rare.models.layout.classical",
         #"recursive-xycut": "rare.models.layout.classical",
-        #"nemotron":        "rare.models.layout.nemotron",
+        "nemotron":        "rare.models.layout.nemotron",
         "dit":             "rare.models.layout.dit",
         "layoutlmv3":      "rare.models.layout.layoutlmv3",
         "vgt":             "rare.models.layout.vgt",
