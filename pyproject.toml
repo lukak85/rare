@@ -33,6 +33,7 @@ mask-rcnn = ["torch", "torchvision", "effdet"]
 pp-doclayoutv3 = ["paddleocr[all]"]
 pp-doclayoutv3-torch = ["torchvision", "torchmetrics"]
 rf-detr = ["rfdetr-doclayout", "requests", "torchmetrics"]
+detr = ["transformers", "torch", "timm", "torchmetrics"]
 vgt = ["timm==0.5.4", "Pillow==8.4.0", "blobfile", "mypy", "numpy", "pytest",
     "requests", "einops", "tensorboard", "scipy", "opencv-python==4.5.1.48", "Shapely==1.8.4", "transformers"]
 

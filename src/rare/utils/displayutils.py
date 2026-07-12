@@ -35,6 +35,15 @@ DOCLAYNET_COLOR_MAP = {
     "Title": "magenta"
 }
 
+PRIMA_COLOR_MAP = {
+    "TextRegion": "#AB59F7",
+    "MathsRegion": "#DE5492",
+    "TableRegion": "#0D38D4",
+    "ImageRegion": "#69C0FF",
+    "SeparatorRegion": "#008BAD",
+    "OtherRegion": "#61F2D3",
+}
+
 D4LA_COLOR_MAP = {
     "DocTitle": "#9EA3FF",
     "ParaTitle": "#0D9E38",

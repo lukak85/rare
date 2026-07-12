@@ -18,6 +18,7 @@ dependencies are needed):
 pip install -e .                   # core package + 'rare' command
 
 # Model specific dependencies
+pip install -e ".[detr]" # + DETR dependencies
 pip install -e ".[dit]" # + DiT dependencies
 pip install -e ".[doclayout-yolo]" # + DocLayout-YOLO dependencies
 pip install -e ".[faster-rcnn]" # + Faster R-CNN dependencies
@@ -156,13 +157,16 @@ The supported models (and therefore given Python version recommendations) were t
 
 | Model                                                                                                       | CLI name         | Type                | Recommended Python version |
 |-------------------------------------------------------------------------------------------------------------|------------------|---------------------|----------------------------|
+| **[DETR](https://huggingface.co/cmarkea/detr-layout-detection)**                                            | `detr`           | Vision transformers | 3.14.3                     |
 | **[DiT](https://github.com/microsoft/unilm/tree/master/dit)**                                               | `dit`            | Vision transformers | 3.8                        |
 | **[DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)**                                         | `doclayout-yolo` | Object detection    | 3.10                       |
 | **Faster R-CNN***                                                                                           | `faster-rcnn`    | CNN-based           | 3.12                       |
 | **[LayoutLMv3](https://github.com/microsoft/unilm/tree/master/layoutlmv3)**                                 | `layoutlmv3`     | Multimodal          | 3.7                        |
 | **Mask R-CNN***                                                                                             | `mask-rcnn`      | CNN-based           | 3.12                       |
+| **[Nemotron-Page-Elements-v3](https://huggingface.co/nvidia/nemotron-page-elements-v3)**                    | `nemotron`       | Object detection    | 3.14                       |
 | **[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)**                                    | `pp-doclayoutv3` | Vision transformers | 3.12                       |
 | **[RF-DETR](https://huggingface.co/neka-nat/rfdetr-doclayout)**                                             | `rf-detr`        | Vision transformers | 3.14                       |
+| **[SwinDocSegmenter](https://github.com/ayanban011/SwinDocSegmenter)**                                      | `swindocseg`     | Vision transformers | 3.8                        |
 | **[VGT](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/DocumentUnderstanding/VGT)** | `vgt`            | Multimodal          | 3.8                        |
 
 \* Included in LayoutParser with detectron2
@@ -579,6 +583,7 @@ manually annotated Glasbena Mladina magazines.
 | LayoutLMv3 (_Cascade R-CNN_) | Base / PubLayNet                           | 0.1             | 40.88 / 54.08 / 44.12 / 8.35 / 27.80 / 45.13                                | 26.12 / 64.03 / 32.50 / -                           |
 | RF-DETR (_RF-DETR_)          | DocLayNet                                  | 0               | 31.37 / 44.34 / 31.96 / 4.98 / 15.59 / 45.60                                | 24.73 / 38.10 / 52.38 / 10.26                       |
 | PP-DocLayoutV3               | _In-house_                                 | 0               | **64.24** / **73.04** / **67.75** / <ins>16.24</ins> / 33.98 / **76.98**    | <ins>42.46</ins> / <ins>71.09</ins> / **79.15** / - |
+| SwinDocSegmenter             | DocLayNet                                  | 0.2             | **64.24** / **73.04** / **67.75** / <ins>16.24</ins> / 33.98 / **76.98**    | <ins>42.46</ins> / <ins>71.09</ins> / **79.15** / - |
 | VGT (_Cascade R-CNN_)        | DocLayNet                                  | 0.1             | 50.56 / <ins>70.60</ins> / 50.48 / 9.28 / <ins>34.10</ins> / 64.11          | 36.11 / 65.96 / <ins>78.62</ins> / 21.54            |
 | VGT (_Cascade R-CNN_)        | D4LA                                       | 0.1             | 50.15 / 69.24 / 52.66 / 10.70 / 32.37 / 65.42                               | 32.81 / 66.53 / 70.37 / <ins>30.88</ins>            |
 
@@ -626,7 +631,6 @@ control and checking of calculations):
 | Claude   | Opus 4.8             | TODO           | TODO              |
 | Claude   | Fable 5              | TODO           | TODO              |
 | Gemini   | Gemini 3 Pro         | TODO           | TODO              |
-| Ovis2.6  | Ovis2.6-30B-A3B      | TODO           | TODO              |
 | Qwen3-VL | Qwen3-VL-8B-Instruct | TODO           | TODO              |
 
 **Note**: NED - Normalized edit distance

@@ -22,6 +22,7 @@ COLOR_MAP_DATASETS = {
     "DocLayNet": DOCLAYNET_COLOR_MAP,
     "PubLayNet": PUBLAYNET_COLOR_MAP,
     "PP-DocLayoutV3": PPDOCLAYOUTV3_COLOR_MAP,
+    "Prima": PRIMA_COLOR_MAP,
     "GlasbenaMladina": GLASANA_COLOR_MAP
 }
 
