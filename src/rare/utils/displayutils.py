@@ -65,6 +65,15 @@ D4LA_COLOR_MAP = {
     "PageNumber": "orange",
 }
 
+NEMOTRON_COLOR_MAP = {
+    "table": "#0A0A46",
+    "chart": "#0D38D4",
+    "title": "#0D9E38",
+    "infographic": "#9EA3FF",
+    "text": "#AB59F7",
+    "header_footer": "#9EA3FF",
+}
+
 # Color map matching our annotation categories
 PPDOCLAYOUTV3_COLOR_MAP = {
     "header": "#9EA3FF",
