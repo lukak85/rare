@@ -612,7 +612,7 @@ control and checking of calculations):
 | GLM-OCR             | GLM-4V                  | 0.1379*           | 0.1941*           |
 | Marker              | Default                 | 0.0461            | 0.1033            |
 | MinerU              | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
-| Nemotron-Parse-v1.2 | -                       | 0.0461            | 0.1033            |
+| Nemotron-Parse-v1.2 | -                       | 0.0686            | 0.0914            |
 | PaddleOCR           | PaddleOCR-VL-1.6        | 0.115             | 0.170             |
 | Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
 
