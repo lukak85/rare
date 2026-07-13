@@ -30,6 +30,7 @@ _DEFERRED: dict[str, dict[str, str]] = {
         "doclayout-yolo":  "rare.models.layout.doclayout_yolo",
         # DETR family
         "rf-detr":         "rare.models.layout.rfdetr",
+        "detr":            "rare.models.layout.detr",
         # Paddle family
         "ppyolo":          "rare.models.layout.paddle_models",
         "pp-doclayoutv3":  "rare.models.layout.paddle_models",
@@ -38,7 +39,7 @@ _DEFERRED: dict[str, dict[str, str]] = {
         #"docstrum":        "rare.models.layout.classical",
         #"rlsa":            "rare.models.layout.classical",
         #"recursive-xycut": "rare.models.layout.classical",
-        #"nemotron":        "rare.models.layout.nemotron",
+        "nemotron":        "rare.models.layout.nemotron",
         "dit":             "rare.models.layout.dit",
         "layoutlmv3":      "rare.models.layout.layoutlmv3",
         "vgt":             "rare.models.layout.vgt",
@@ -81,6 +82,7 @@ _LP_BACKEND_ENV: dict[str, str] = {
     "swindocseg":      "swindocseg",
     "doclayout-yolo":  "doclayout_yolo",
     "rf-detr":         "rfdetr",
+    "detr":            "detr",
     "ppyolo":          "paddle",
     "pp-doclayoutv3":  "ppdoclayoutv3",
     "efficientdet":    "effdet",

@@ -9,7 +9,10 @@ the original layout — the shape `ReadingOrderBackend` requires.
 
 from __future__ import annotations
 
+import warnings
+
 from rare.models.registry import register
+from rare.models.order.builtin import TopBottomBackend
 from rare.models.order.xycut_enhanced import (
     LayoutBlock,
     LayoutRegion,
@@ -113,7 +116,17 @@ class XYCutBackend:
             kept_orig.append(orig_i)
 
         region = LayoutRegion(page_bbox, blocks)
-        ordered = xycut_enhanced(region)
+        try:
+            ordered = xycut_enhanced(region)
+        except Exception as exc:
+            warnings.warn(
+                f"XY-Cut failed ({exc!r}); falling back to top-to-bottom ordering.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return TopBottomBackend().order(
+                layout, image=image, page_no=page_no, pdf_stem=pdf_stem
+            )
 
         seen: set[int] = set()
         indices: list[int] = []

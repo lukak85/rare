@@ -35,6 +35,15 @@ DOCLAYNET_COLOR_MAP = {
     "Title": "magenta"
 }
 
+PRIMA_COLOR_MAP = {
+    "TextRegion": "#AB59F7",
+    "MathsRegion": "#DE5492",
+    "TableRegion": "#0D38D4",
+    "ImageRegion": "#69C0FF",
+    "SeparatorRegion": "#008BAD",
+    "OtherRegion": "#61F2D3",
+}
+
 D4LA_COLOR_MAP = {
     "DocTitle": "#9EA3FF",
     "ParaTitle": "#0D9E38",
@@ -63,6 +72,15 @@ D4LA_COLOR_MAP = {
     "Number": "orange",
     "Catalog": "orange",
     "PageNumber": "orange",
+}
+
+NEMOTRON_COLOR_MAP = {
+    "table": "#0A0A46",
+    "chart": "#0D38D4",
+    "title": "#0D9E38",
+    "infographic": "#9EA3FF",
+    "text": "#AB59F7",
+    "header_footer": "#9EA3FF",
 }
 
 # Color map matching our annotation categories
