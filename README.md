@@ -180,6 +180,7 @@ The supported models (and therefore given Python version recommendations) were t
 |-------------------------------------------------------------------------------------|---------------|--------------------|----------------------------|
 | **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**                 | `deepseekocr` | Specialized VLMs   | 3.12.9                     |
 | **[Docling](https://github.com/docling-project/docling)**                           | `docling`     | Specialized VLMs   | 3.14                       |
+| **[Dolphin](https://github.com/bytedance/Dolphin)**                           | `dolphin`       | Specialized VLMs   | 3.13                       |
 | **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                           | `dots-ocr`    | Specialized VLMs   | 3.12                       |
 | **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                                   | `glm-ocr`     | Specialized VLMs   | 3.13                       |
 | **[Marker](https://github.com/datalab-to/marker)**                                  | `marker`      | Specialized VLMs   | 3.10                       |
