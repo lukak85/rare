@@ -43,7 +43,7 @@ class GeminiBackend:
                 image_data = base64.b64encode(img_file.read()).decode('utf-8')
 
             async with session.post(
-                    url=f"{self.base_url}",
+                    url=f"{self.base_url}/chat/completions",
                     json={
                         "model": self.model_name,
                         "messages": [
