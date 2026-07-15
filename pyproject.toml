@@ -41,8 +41,8 @@ marker = ["marker-pdf", "pdfplumber<0.11.10", "pillow>=10.2.0,<11.0.0", "pypdfiu
 nemotron = ["albumentations", "timm", "open_clip_torch", "accelerate==1.12.0", "albumentations==2.0.8",
     "transformers==5.6.1", "timm==1.0.22", "beautifulsoup4"]
 
-claude   = ["anthropic"]
-gemini = ["google-genai"]
+claude   = ["anthropic", "aiohttp"]
+gemini = ["google-genai", "aiohttp"]
 gpt = ["aiohttp"]
 # MinerU is installed separately: pip install -U "mineru[core]"
 
