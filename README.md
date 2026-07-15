@@ -630,13 +630,14 @@ control and checking of calculations):
 
 ### General VLMs
 
-| Model    | Type                 | Text block NED | Reading order NED |
-|----------|----------------------|----------------|-------------------|
-| ChatGPT  | GPT 5.6              | TODO           | TODO              |
-| Claude   | Opus 4.8             | TODO           | TODO              |
-| Claude   | Fable 5              | TODO           | TODO              |
-| Gemini   | Gemini 3 Pro         | TODO           | TODO              |
-| Qwen3-VL | Qwen3-VL-8B-Instruct | TODO           | TODO              |
+| Model    | Type                 | Text block NED | Reading order NED | Mean cost per page* and token usage                                                                             |
+|----------|----------------------|----------------|-------------------|-----------------------------------------------------------------------------------------------------------------|
+| ChatGPT  | GPT 5.5              | TODO           | TODO              | \$0.1444 / 0,13€<br/>-\$0.0203 for 4050 tokens at \$5/MTok IN<br/>-\$0.1247 for 4157 at \$30.00/MTok OUT        |
+| Claude   | Opus 4.8             | TODO           | TODO              | \$0.0935 / 0,082€<br/>-\$0.0279 for 5584 tokens at \$5/MTok IN<br/>-\$0.0656 for 2624 tokens at \$25/MTok OUT   |
+| Gemini   | Gemini 3.1 Pro       | TODO           | TODO              | \$0.0825 / 0,072€<br/>-\$0.0021 for 1277 tokens at ~\$2/MTok IN<br/>-\$0.0804 for 8007 tokens at ~\$12/MTok OUT |
+| Qwen3-VL | Qwen3-VL-8B-Instruct | TODO           | TODO              | -                                                                                                               |
+
+\* As of 15.7.2026, unoptimised (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
 
 **Note**: NED - Normalized edit distance
 
@@ -660,11 +661,11 @@ Top priority:
   - [x] Fix classes and other issues in OmniDocBench layout evaluation
 - [X] Add specialized VLM support:
   - [x] Marker
-- [ ] Add general VLM support, among others:
+- [x] Add general VLM support, among others:
   - [x] Qwen3-VL
-  - [ ] GPT 5.5
-  - [ ] Gemini Pro 3.1
-  - [ ] Anthropic Claude Fable 5 / Opus 4.8
+  - [x] GPT 5.5
+  - [x] Gemini Pro 3.1
+  - [x] Anthropic Claude Opus 4.8
 - [ ] Evaluate all models: 
   - [x] Pipeline
   - [x] Specialized VLM
