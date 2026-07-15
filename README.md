@@ -184,7 +184,7 @@ The supported models (and therefore given Python version recommendations) were t
 |-------------------------------------------------------------------------------------|---------------|--------------------|----------------------------|
 | **[DeepSeek-OCR-2](https://github.com/deepseek-ai/DeepSeek-OCR-2)**                 | `deepseekocr` | Specialized VLMs   | 3.12.9                     |
 | **[Docling](https://github.com/docling-project/docling)**                           | `docling`     | Specialized VLMs   | 3.14                       |
-| **[Dolphin](https://github.com/bytedance/Dolphin)**                           | `dolphin`       | Specialized VLMs   | 3.13                       |
+| **[Dolphin](https://github.com/bytedance/Dolphin)**                                 | `dolphin`     | Specialized VLMs   | 3.13                       |
 | **[dots.ocr](https://github.com/rednote-hilab/dots.ocr)**                           | `dots-ocr`    | Specialized VLMs   | 3.12                       |
 | **[GLM-OCR](https://github.com/zai-org/GLM-OCR)**                                   | `glm-ocr`     | Specialized VLMs   | 3.13                       |
 | **[Marker](https://github.com/datalab-to/marker)**                                  | `marker`      | Specialized VLMs   | 3.10                       |
@@ -618,6 +618,7 @@ control and checking of calculations):
 | DeepSeekOCR-2       | -                       | 0.188             | 0.115             |
 | Docling             | Default                 | 0.0664            | 0.164             |
 | dots.ocr            | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
+| Dolphin             | Dolphinv2               | 0.0542            | 0.0896            |
 | GLM-OCR             | GLM-4V                  | 0.1379*           | 0.1941*           |
 | Marker              | Default                 | 0.0461            | 0.1033            |
 | MinerU              | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
@@ -639,6 +640,14 @@ control and checking of calculations):
 
 **Note**: NED - Normalized edit distance
 
+#### Page wise breakdown of NED scores for best VLMs
+
+| Model               | Type                    | Text block NED    | Reading order NED |
+|---------------------|-------------------------|-------------------|-------------------|
+| dots.ocr            | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
+| Marker              | Default                 | 0.0461            | 0.1033            |
+| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
+
 # Demo
 
 _TODO_
@@ -656,7 +665,6 @@ Top priority:
   - [ ] GPT 5.5
   - [ ] Gemini Pro 3.1
   - [ ] Anthropic Claude Fable 5 / Opus 4.8
-  - [ ] DeepSeek V3
 - [ ] Evaluate all models: 
   - [x] Pipeline
   - [x] Specialized VLM
