@@ -34,7 +34,7 @@ from tqdm import tqdm
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 from rare.models.registry import register
-from .utils.dolphin import *
+from rare.models.vlm.utils.dolphin import *
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp"}
 
@@ -62,12 +62,21 @@ class DolphinBackend:
 
     def _get_processor(self):
         if self._processor is None:
-            self._processor = AutoProcessor.from_pretrained("ByteDance/Dolphin-v2")
+            self._processor = AutoProcessor.from_pretrained(
+                "ByteDance/Dolphin-v2",
+                padding_side="left"
+            )
         return self._processor
 
     def _get_model(self):
         if self._model is None:
-            self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained("ByteDance/Dolphin-v2")
+            import torch
+            self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                "ByteDance/Dolphin-v2",
+                # torch_dtype=torch.bfloat16,        # or "auto"
+                # attn_implementation="sdpa",        # flash_attention_2 if installed
+                device_map="cuda:0"
+            )
         return self._model
 
     def chat(self, prompt, image):
@@ -135,7 +144,7 @@ class DolphinBackend:
             max_new_tokens=4096,
             do_sample=False,
             temperature=None,
-            # repetition_penalty=1.05
+            repetition_penalty=1.08
         )
         generated_ids_trimmed = [
             out_ids[len(in_ids):]
@@ -185,15 +194,15 @@ class DolphinBackend:
             image = Image.open(Path(image_dir) / image_file)
             layout_output = self.chat("Parse the reading order of this document.", image)
 
-            recognition_results = process_elements(layout_output, image, self, None, out_md_dir, image)
+            recognition_results = process_elements(layout_output, image, self, 4, out_md_dir, image_file.split(".")[0])
 
             # Create a dummy image path for save_outputs function
-            json_path = save_outputs(recognition_results, image, image_file, out_md_dir, post_process=False)
+            json_path = save_outputs(recognition_results, image, image_file.split(".")[0], out_md_dir, post_process=False)
 
         return out_md_dir
 
 
-def process_document(document_path, model, save_dir, max_batch_size=None, post_process=False):
+def process_document(document_path, model, save_dir, max_batch_size=4, post_process=False):
     """Parse documents with two stages - Handles both images and PDFs"""
     file_ext = os.path.splitext(document_path)[1].lower()
 
@@ -297,7 +306,7 @@ def process_elements(layout_results, image, model, max_batch_size, save_dir=None
                 pil_crop = image.crop((x1, y1, x2, y2))
 
             if pil_crop.size[0] > 3 and pil_crop.size[1] > 3:
-                if label == "fig":
+                if label == "fig" and False:
                     figure_filename = save_figure_to_local(pil_crop, save_dir, image_name, reading_order)
                     figure_results.append({
                         "label": label,
