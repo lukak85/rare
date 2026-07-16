@@ -630,14 +630,16 @@ control and checking of calculations):
 
 ### General VLMs
 
-| Model    | Type                 | Text block NED | Reading order NED | Mean cost per page* and token usage                                                                             |
-|----------|----------------------|----------------|-------------------|-----------------------------------------------------------------------------------------------------------------|
-| ChatGPT  | GPT 5.5              | TODO           | TODO              | \$0.1444 / 0,13€<br/>-\$0.0203 for 4050 tokens at \$5/MTok IN<br/>-\$0.1247 for 4157 at \$30.00/MTok OUT        |
-| Claude   | Opus 4.8             | TODO           | TODO              | \$0.0935 / 0,082€<br/>-\$0.0279 for 5584 tokens at \$5/MTok IN<br/>-\$0.0656 for 2624 tokens at \$25/MTok OUT   |
-| Gemini   | Gemini 3.1 Pro       | TODO           | TODO              | \$0.0825 / 0,072€<br/>-\$0.0021 for 1277 tokens at ~\$2/MTok IN<br/>-\$0.0804 for 8007 tokens at ~\$12/MTok OUT |
-| Qwen3-VL | Qwen3-VL-8B-Instruct | TODO           | TODO              | -                                                                                                               |
+| Model    | Type                 | Text block NED*    | Reading order NED* | Mean cost per page** and token usage                                                                            |
+|----------|----------------------|--------------------|--------------------|-----------------------------------------------------------------------------------------------------------------|
+| ChatGPT  | GPT 5.5              | <ins>0.05688</ins> | <ins>0.0706</ins>  | \$0.1444 / 0,13€<br/>-\$0.0203 for 4050 tokens at \$5/MTok IN<br/>-\$0.1247 for 4157 at \$30.00/MTok OUT        |
+| Claude   | Opus 4.8             | **0.0504**         | 0.0800             | \$0.0935 / 0,082€<br/>-\$0.0279 for 5584 tokens at \$5/MTok IN<br/>-\$0.0656 for 2624 tokens at \$25/MTok OUT   |
+| Gemini   | Gemini 3.1 Pro       | 0.0718             | **0.0664**         | \$0.0825 / 0,072€<br/>-\$0.0021 for 1277 tokens at ~\$2/MTok IN<br/>-\$0.0804 for 8007 tokens at ~\$12/MTok OUT |
+| Qwen3-VL | Qwen3-VL-8B-Instruct | TODO               | TODO               | -                                                                                                               |
 
-\* As of 15.7.2026, unoptimised (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
+\* Currently only evaluated on a single PDF.
+
+\** As of 15.7.2026, unoptimised (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
 
 **Note**: NED - Normalized edit distance
 
