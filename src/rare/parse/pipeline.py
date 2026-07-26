@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pdfplumber
 
+from rare.doc.renderers import to_markdown
 from rare.doc.schema import (
     Article,
     GlasanaDocument,
@@ -44,7 +45,8 @@ def parse_pdf(
     output_dir: str | Path = "outputs/parsed",
     dpi: int = 200,
     per_page: bool = False,
-    save_coco: bool = False
+    save_coco: bool = False,
+    emit_omnidocbench: bool = False,
 ) -> Path:
     """Run layout detection, reading-order, text extraction, and assembly on a PDF.
 
@@ -62,6 +64,14 @@ def parse_pdf(
     file carrying the layout detector's raw boxes/labels plus an `order_id` per
     annotation from the reading-order backend (same export the evaluate pipeline
     produces).
+
+    When `emit_omnidocbench` is True, also writes one Markdown file per page
+    under `omnidocbench/` as `{stem}_{page_no}.md` — the flat `<image_stem>.md`
+    layout OmniDocBench's end2end evaluator mounts at `data_md/predictions`.
+    These are rendered from the regions *as detected*, before
+    `merge_flowing_paragraphs` re-joins paragraphs split across columns or
+    pages, so the export scores the DLA model's own segmentation rather than
+    our post-processing. The regular `{stem}.md` / `pages/` outputs stay merged.
     """
     pdf_path = Path(pdf_path)
     pdf_stem = pdf_path.stem
@@ -120,6 +130,19 @@ def parse_pdf(
 
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
 
+            # OmniDocBench scores the detector's own segmentation, so this
+            # export is taken before the paragraph merge below.
+            if emit_omnidocbench:
+                _write_omnidocbench_page(
+                    out_dir / "omnidocbench",
+                    pdf_stem=pdf_stem,
+                    page_no=page_no,
+                    regions=regions,
+                    texts=texts,
+                    img_w=img_w,
+                    img_h=img_h,
+                )
+
             # Re-join paragraphs split across columns, page geometry, or floats
             # (e.g. a figure inserted mid-paragraph) into one logical paragraph.
             regions, texts = merge_flowing_paragraphs(regions, texts)
@@ -141,6 +164,47 @@ def parse_pdf(
         save_coco_to_json(coco_data, str(out_dir / f"{pdf_stem}_coco.json"))
 
     return write_outputs(doc, output_dir, per_page=per_page)
+
+
+def _write_omnidocbench_page(
+    odb_dir: Path,
+    pdf_stem: str,
+    page_no: int,
+    regions: list[dict],
+    texts: dict[str, str],
+    img_w: int,
+    img_h: int,
+) -> Path:
+    """Render one page's regions to `<odb_dir>/{pdf_stem}_{page_no}.md`.
+
+    Assembles a throw-away single-page document so the markdown goes through
+    the same renderer the VLM track is scored with. `page_image` is left None:
+    figure crops already belong to the main output and are not re-written here
+    (figures render as an image with an empty src, which the evaluator's
+    markdown parser drops).
+    """
+    page_doc = GlasanaDocument(source_pdf=pdf_stem)
+    page_doc.pages[page_no] = PageInfo(
+        page_no=page_no,
+        width=img_w,
+        height=img_h,
+        source_file=f"{pdf_stem}_{page_no}.jpg",
+    )
+    assemble_page(
+        page_doc,
+        page_no=page_no,
+        regions=regions,
+        texts=texts,
+        img_w=img_w,
+        img_h=img_h,
+        figures_dir=odb_dir,
+        current_article=None,
+    )
+
+    odb_dir.mkdir(parents=True, exist_ok=True)
+    md_path = odb_dir / f"{pdf_stem}_{page_no}.md"
+    md_path.write_text(to_markdown(page_doc))
+    return md_path
 
 
 def _join_coco_pages(pages: list[dict]) -> dict:

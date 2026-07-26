@@ -105,10 +105,19 @@ def cmd_parse(args: argparse.Namespace) -> int:
     # Imported only after the layout backend is constructed.
     from rare.parse.pipeline import parse_pdf
 
-    out = parse_pdf(args.pdf, layout, order, output_dir=args.output, dpi=args.dpi, per_page=args.per_page, save_coco=args.emit_coco)
+    out = parse_pdf(
+        args.pdf, layout, order,
+        output_dir=args.output,
+        dpi=args.dpi,
+        per_page=args.per_page,
+        save_coco=args.emit_coco,
+        emit_omnidocbench=args.emit_omnidocbench,
+    )
     print(f"Output written to: {out}")
     if args.emit_coco:
         print(f"COCO JSON written to: {out / f'{Path(args.pdf).stem}_coco.json'}")
+    if args.emit_omnidocbench:
+        print(f"OmniDocBench per-page Markdown written to: {out / 'omnidocbench'}")
     return 0
 
 
@@ -254,7 +263,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="emit_omnidocbench",
         action="store_true",
         help="COCO-track: also write <output>/omnidocbench.json (per-page list with "
-             "per-region text from the PDF) for evaluating VLMs against OmniDocBench.",
+             "per-region text from the PDF) for evaluating VLMs against OmniDocBench. "
+             "Pipeline-track: also write one Markdown file per page to "
+             "<output>/<stem>/omnidocbench/<stem>_<page>.md, rendered from the "
+             "regions as detected (before paragraphs are merged), for "
+             "OmniDocBench's end2end evaluator.",
     )
     p_parse.add_argument(
         "--emit-coco",

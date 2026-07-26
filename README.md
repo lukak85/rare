@@ -53,11 +53,16 @@ rare parse <pdf> --layout doclayout-yolo --order top-bottom
 # VLM track (mutually exclusive with --layout)
 rare parse <pdf> --vlm claude
 
+# Pipeline track, with per-page Markdown for OmniDocBench's end2end evaluator
+rare parse <pdf> --layout doclayout-yolo --emit-omnidocbench
+
 # Discover backends
 rare parse --list-models
 ```
 
 Outputs are stored in `outputs/parsed/<pdf_stem>/{<stem>.html, <stem>.md, <stem>_doc.json, figures/}`.
+
+On the pipeline track, `--emit-omnidocbench` additionally writes one Markdown file per page to `outputs/parsed/<pdf_stem>/omnidocbench/<stem>_<page>.md` — the flat `<image_stem>.md` layout OmniDocBench's end-to-end evaluator mounts at `data_md/predictions`. These pages are rendered from the regions **as the DLA model detected them**, before the heuristic pass that re-joins paragraphs split across columns or pages, so the score reflects the model's own segmentation. The regular `<stem>.md` (and `--per-page` output under `pages/`) stay merged.
 
 ### `rare evaluate` — score one model against a dataset
 
@@ -671,7 +676,7 @@ Top priority:
 - [ ] Evaluate all models: 
   - [x] Pipeline
   - [x] Specialized VLM
-  - [ ] General VLM
+  - [x] General VLM (currently limited to a single PDF)
 
 Lower priority:
 - [ ] Add support for Paragraph2Graph, M2Doc

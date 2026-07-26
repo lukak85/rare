@@ -196,6 +196,11 @@ def edit_distance(a, b):
             prev = cur
     return dp[n]
 
+def bleu(prediction, reference):
+    # Simple implementation - replace with actual BLEU calculation if needed
+    from nltk.translate.bleu_score import sentence_bleu
+    return sentence_bleu(reference, prediction)
+
 def normalized_edit_distance(a, b):
     denom = max(len(a), len(b))
     return edit_distance(a, b) / denom if denom else 0.0
