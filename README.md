@@ -179,7 +179,7 @@ The supported models (and therefore given Python version recommendations) were t
 ### Pipeline track — reading-order backends
 
 | Model                                                                    | CLI name         | Type                | Recommended Python version |
-|-----------------------------------------------------1---------------------|------------------|---------------------|----------------------------|
+|--------------------------------------------------------------------------|------------------|---------------------|----------------------------|
 | Top-bottom                                                               | _Default_        | Rule based          | Any                        |
 | Left-right                                                               | `left-right`     | Rule based          | Any                        |
 | **[PaddleX's Improved XY-Cut](https://github.com/PaddlePaddle/PaddleX)** | `paddlex-xy-cut` | Rule based          | Any                        |
