@@ -178,10 +178,12 @@ The supported models (and therefore given Python version recommendations) were t
 
 ### Pipeline track — reading-order backends
 
-| Model                                                                    | CLI name         | Type       | Recommended Python version |
-|--------------------------------------------------------------------------|------------------|------------|----------------------------|
-| Top-bottom                                                               | _Default_        | Rule based | Any                        |
-| **[PaddleX's Improved XY-Cut](https://github.com/PaddlePaddle/PaddleX)** | `paddlex-xy-cut` | Rule based | Any                        |
+| Model                                                                    | CLI name         | Type                | Recommended Python version |
+|-----------------------------------------------------1---------------------|------------------|---------------------|----------------------------|
+| Top-bottom                                                               | _Default_        | Rule based          | Any                        |
+| Left-right                                                               | `left-right`     | Rule based          | Any                        |
+| **[PaddleX's Improved XY-Cut](https://github.com/PaddlePaddle/PaddleX)** | `paddlex-xy-cut` | Rule based          | Any                        |
+| **[LayoutReader](https://github.com/FreeOCR-AI/layoutreader)**           | `layoutreader`   | Vision transformers | Any                        |
 
 ### VLM track
 
@@ -232,7 +234,7 @@ rare/                         # installable package — entry point: rare = "rar
 │   ├── base.py               # LayoutBackend / ReadingOrderBackend / VLMBackend protocols
 │   ├── registry.py           # lazy registry; sets LAYOUTPARSER_BACKEND env var
 │   ├── layout/               # layout detection model/method classes
-│   ├── order/builtin.py      # order detection model/method classes
+│   ├── order/                # order detection model/method classes
 │   └── vlm/                  # visual language model document parsing classes
 ├── parse/                    # PDF → pages → layout → order → text → GlasanaDocument
 ├── evaluate/                 # dataset loaders + pipeline/VLM metrics + runner + report
@@ -610,7 +612,8 @@ control and checking of calculations):
 | Model                     | Normalized edit distance | Kendall Tau | BLEU   |
 |---------------------------|--------------------------|-------------|--------|
 | Top to bottom             | 0.6556                   | 0.3763      | 0.1007 |
-| PaddleX's Improved XY-Cut | 0.2411                   | 0.8107      | TODO   |
+| Left to right             | 0.2222                   | 0.5857      | 0.6322 |
+| PaddleX's Improved XY-Cut | 0.2411                   | 0.8107      | 0.6349 |
 | LayoutReader              | 0.1696                   | 0.8599      | 0.7143 |
 
 
