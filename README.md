@@ -686,9 +686,10 @@ Thanks for the work of the authors of these projects:
 - [layoutreader](https://github.com/FreeOCR-AI/layoutreader) — the `layoutreader` reading-order backend uses the LayoutLMv3 inference helpers and the `hantian/layoutreader` checkpoint from Hantian Pang's faster LayoutReader (**CC BY-NC-SA 4.0**); see `NOTICE` and `licenses/LICENSE-LAYOUTREADER`, and the licensing note below.
 - [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)
 
-# Licensing
+<details>
+<summary><b>LayoutReader specifics</b></summary>
 
-RaRe is released under the Apache License 2.0 (see `LICENSE`), **with one
+RaRe uses Apache License 2.0 (see `LICENSE`), **with one
 exception**: `src/rare/models/order/layoutreader_helpers/helpers.py` is
 vendored verbatim from [FreeOCR-AI/layoutreader](https://github.com/FreeOCR-AI/layoutreader)
 and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/),
@@ -699,7 +700,16 @@ under the same license. Every other backend, including the `xy-cut` reading-orde
 backends, is unaffected and remains Apache-2.0. See `NOTICE` for the full
 per-component breakdown.
 
+</details>
+
 # Citation
+
+```BibTeX
+TODO
+```
+
+<details>
+<summary><b>LayoutReader specifics</b></summary>
 
 If you use the `layoutreader` reading-order backend, please cite the upstream
 implementation and the original LayoutReader paper:
@@ -728,8 +738,4 @@ implementation and the original LayoutReader paper:
 }
 ```
 
-To cite RaRe itself:
-
-```BibTeX
-TODO
-```
+</details>
