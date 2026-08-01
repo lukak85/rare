@@ -593,12 +593,12 @@ control and checking of calculations):
 
 ## Reading Order
 
-| Model                     | Normalized edit distance | Kendall Tau | BLEU   |
-|---------------------------|--------------------------|-------------|--------|
-| Top to bottom             | 0.6556                   | 0.3763      | 0.1007 |
-| Left to right             | 0.2222                   | 0.5857      | 0.6322 |
-| PaddleX's Improved XY-Cut | 0.2411                   | 0.8107      | 0.6349 |
-| LayoutReader              | 0.1696                   | 0.8599      | 0.7143 |
+| Model                     | Normalized edit distance | Kendall Tau       | BLEU              |
+|---------------------------|--------------------------|-------------------|-------------------|
+| Top to bottom             | 0.6556                   | 0.3763            | 0.1007            |
+| Left to right             | <ins>0.2222</ins>        | 0.5857            | 0.6322            |
+| PaddleX's Improved XY-Cut | 0.2411                   | <ins>0.8107</ins> | <ins>0.6349</ins> |
+| LayoutReader              | **0.1696**               | **0.8599**        | **0.7143**        |
 
 
 ## VLM
