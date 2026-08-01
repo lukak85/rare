@@ -531,26 +531,6 @@ Follow the instructions on [Youtu's GitHub repository](https://github.com/Tencen
 
 ---
 
-### Claude
-
-TODO
-
-https://platform.claude.com/docs/en/build-with-claude/pdf-support
-
-### DeepSeek
-
-TODO
-
-### Gemini
-
-TODO
-
-https://ai.google.dev/gemini-api/docs/document-processing
-
-### GPT
-
-TODO
-
 ### Qwen3-VL
 
 Follow the instructions of model of choice on [Qwen3-VL's Hugging Face repository](https://huggingface.co/collections/Qwen/qwen3-vl).
@@ -566,6 +546,10 @@ vllm serve Qwen/Qwen3-VL-8B-Instruct \
 ```
 
 </details>
+
+Note: for Claude, ChatGPT and Gemini, the user must have an account and API key, which is pasted into the config file,
+which must then be passed as a parameter. The examples for each of them are present in ther respective
+[configs](configs) directories.
 
 ## Evaluation
 
