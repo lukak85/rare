@@ -607,11 +607,11 @@ control and checking of calculations):
 
 ## Reading Order
 
-| Model                     | Normalized edit distance | Kendall Tau | BLEU |
-|---------------------------|--------------------------|-------------|------|
-| Top to bottom             | TODO                     | TODO        | TODO |
-| PaddleX's Improved XY-Cut | 0.2411                   | 0.8107      | TODO |
-| LayoutReader              | TODO                     | TODO        | TODO |
+| Model                     | Normalized edit distance | Kendall Tau | BLEU   |
+|---------------------------|--------------------------|-------------|--------|
+| Top to bottom             | 0.6556                   | 0.3763      | 0.1007 |
+| PaddleX's Improved XY-Cut | 0.2411                   | 0.8107      | TODO   |
+| LayoutReader              | 0.1696                   | 0.8599      | 0.7143 |
 
 
 ## VLM
@@ -696,9 +696,52 @@ see its integration into rare and outputting in an arbitrary format (such as JSO
 Thanks for the work of the authors of these projects:
 - [PaddleX](https://github.com/PaddlePaddle/PaddleX) — the improved XY-Cut reading-order backend is vendored from PaddleX (Apache-2.0); see `NOTICE` and `licenses/LICENSE-PADDLEX`.
 - [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — the end-to-end Edit-distance evaluator (run via `--run-omnidocbench`) and the specialized VLM `img2md` parsing backends are adapted from OmniDocBench (Apache-2.0); see `NOTICE` and `licenses/LICENSE-OMNIDOCBENCH`.
+- [layoutreader](https://github.com/FreeOCR-AI/layoutreader) — the `layoutreader` reading-order backend uses the LayoutLMv3 inference helpers and the `hantian/layoutreader` checkpoint from Hantian Pang's faster LayoutReader (**CC BY-NC-SA 4.0**); see `NOTICE` and `licenses/LICENSE-LAYOUTREADER`, and the licensing note below.
 - [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)
 
+# Licensing
+
+RaRe is released under the Apache License 2.0 (see `LICENSE`), **with one
+exception**: `src/rare/models/order/layoutreader_helpers/helpers.py` is
+vendored verbatim from [FreeOCR-AI/layoutreader](https://github.com/FreeOCR-AI/layoutreader)
+and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/),
+as is the `hantian/layoutreader` checkpoint that the backend downloads at
+runtime. Consequently the `layoutreader` reading-order backend may be used for
+**non-commercial purposes only**, and adaptations of that file must be shared
+under the same license. Every other backend, including the `xy-cut` reading-order
+backends, is unaffected and remains Apache-2.0. See `NOTICE` for the full
+per-component breakdown.
+
 # Citation
+
+If you use the `layoutreader` reading-order backend, please cite the upstream
+implementation and the original LayoutReader paper:
+
+```BibTeX
+@software{Pang_Faster_LayoutReader_based_2024,
+  author  = {Pang, Hantian},
+  month   = feb,
+  title   = {{Faster LayoutReader based on LayoutLMv3}},
+  url     = {https://github.com/ppaanngggg/layoutreader},
+  version = {1.0.0},
+  year    = {2024}
+}
+
+@inproceedings{wang-etal-2021-layoutreader,
+  title     = {{L}ayout{R}eader: Pre-training of Text and Layout for Reading Order Detection},
+  author    = {Wang, Zilong and Xu, Yiheng and Cui, Lei and Shang, Jingbo and Wei, Furu},
+  booktitle = {Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing},
+  month     = nov,
+  year      = {2021},
+  address   = {Online and Punta Cana, Dominican Republic},
+  publisher = {Association for Computational Linguistics},
+  url       = {https://aclanthology.org/2021.emnlp-main.389/},
+  doi       = {10.18653/v1/2021.emnlp-main.389},
+  pages     = {4735--4744}
+}
+```
+
+To cite RaRe itself:
 
 ```BibTeX
 TODO

@@ -18,6 +18,26 @@ def _read_config(path: str | None) -> dict | None:
     return json.loads(Path(path).read_text())
 
 
+def _make_order(name: str, config_path: str | None = None, pdf_root=None):
+    """Instantiate a reading-order backend.
+
+    For order backends that accept a `config` dict (e.g. `layoutreader`)
+    also get `pdf_root` filled in from the PDFs already named on the command line,
+    so line-level ordering works without repeating the path in
+    a config file. An explicit `pdf_root` in the config wins.
+    """
+    import inspect
+
+    cls = get("order", name)
+    if "config" not in inspect.signature(cls.__init__).parameters:
+        return cls()
+
+    cfg = dict(_read_config(config_path) or {})
+    if pdf_root and not cfg.get("pdf_root"):
+        cfg["pdf_root"] = str(pdf_root)
+    return cls(config=cfg)
+
+
 def cmd_parse(args: argparse.Namespace) -> int:
     if args.list_models:
         print("Layout backends:")
@@ -42,7 +62,10 @@ def cmd_parse(args: argparse.Namespace) -> int:
         # otherwise the COCO `order_id` field (then top-bottom) is used directly.
         order = None
         if args.order and args.order != "top-bottom":
-            order = get("order", args.order)()
+            order = _make_order(
+                args.order, args.order_config,
+                pdf_root=args.pdfs_dir or (Path(args.pdf).parent if args.pdf else None),
+            )
 
         category_map = None
         if args.category_map:
@@ -99,8 +122,12 @@ def cmd_parse(args: argparse.Namespace) -> int:
     layout_cls = get("layout", args.layout)
     layout = layout_cls(config=_read_config(args.config))
 
-    order_cls = get("order", args.order)
-    order = order_cls()
+    # `pdf_root` is the parsed PDF's own directory: line-level orderers resolve
+    # `<pdf_root>/<pdf_stem>.pdf`, and pipeline.parse_pdf passes that same stem.
+    order = _make_order(
+        args.order, args.order_config,
+        pdf_root=Path(args.pdf).parent if args.pdf else None,
+    )
 
     # Imported only after the layout backend is constructed.
     from rare.parse.pipeline import parse_pdf
@@ -163,18 +190,25 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             return 2
         layout_cls = get("layout", args.layout)
         layout = layout_cls(config=_read_config(args.config))
-        order_cls = get("order", args.order)
-        order = order_cls()
 
-        from rare.evaluate.runner import run_pipeline
+        from rare.evaluate.runner import run_pipeline, _resolve_pdfs_dir
         from rare.evaluate.omnidocbench import load_category_map
         images_dir = Path(args.images_dir) if args.images_dir else None
         category_map = load_category_map(args.category_map) if args.category_map else None
         pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else None
+
+        # Same PDF directory the OmniDocBench text path uses, so a line-level
+        # order backend finds the source PDFs without extra configuration.
+        order = _make_order(
+            args.order, args.order_config,
+            pdf_root=_resolve_pdfs_dir(pdfs_dir, dataset),
+        )
+
         emit_omnidocbench = args.emit_omnidocbench
         agg = run_pipeline(
             dataset, layout, order, run_dir,
             limit=args.limit,
+            start=args.start,
             emit_omnidocbench=emit_omnidocbench,
             category_map=category_map,
             pdfs_dir=pdfs_dir,
@@ -285,6 +319,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON config file passed to the chosen backend.",
     )
     p_parse.add_argument(
+        "--order-config",
+        help="JSON config file for the reading-order backend (e.g. layoutreader's "
+             "pdf_root / granularity / overlap_thresh). Backends that take no "
+             "config ignore it.",
+    )
+    p_parse.add_argument(
         "--output",
         default="outputs/parsed",
         help="Output root directory (default: outputs/parsed).",
@@ -334,6 +374,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("--vlm", help="VLM backend (vlm track).")
     p_eval.add_argument("--config", help="JSON config file for the chosen backend.")
     p_eval.add_argument(
+        "--order-config",
+        help="JSON config file for the reading-order backend (see `parse`).",
+    )
+    p_eval.add_argument(
         "--run-id",
         help="Run directory name under --output (default: current timestamp). "
              "Reuse the same run-id across invocations to accumulate models in one report.",
@@ -344,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output root (default: outputs/evaluations).",
     )
     p_eval.add_argument("--limit", type=int, help="Cap number of samples (for smoke tests).")
+    p_eval.add_argument("--start", type=int, help="Start index for evaluating samples.")
     p_eval.add_argument(
         "--emit-omnidocbench",
         dest="emit_omnidocbench",

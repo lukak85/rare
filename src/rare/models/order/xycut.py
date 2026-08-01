@@ -73,7 +73,7 @@ class XYCutBackend:
     """Recursive XY-Cut with PaddleX's title/header/footer/vision heuristics."""
 
     def order(
-        self, layout, *, image=None, page_no=None, pdf_stem=None, ocr_lines=None
+        self, layout, *, image=None, page_no=None, pdf_stem=None,  ocr_lines=None, img_path=None, pdf_root=None
     ) -> list[int]:
         """Return a reading-order permutation of `layout` indices.
 

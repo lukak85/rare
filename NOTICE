@@ -31,3 +31,32 @@ are adapted from OmniDocBench's tools/model_infer/ inference scripts. Each
 carries an "Adapted from OmniDocBench" header. The OmniDocBench end-to-end
 Edit-distance evaluator is invoked (unmodified, in its published Docker image)
 by src/rare/evaluate/omnidocbench_docker.py.
+
+FreeOCR-AI/layoutreader (https://github.com/FreeOCR-AI/layoutreader)
+Copyright (c) 2024 Hantian Pang.
+Licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+International License (CC BY-NC-SA 4.0); see licenses/LICENSE-LAYOUTREADER.
+
+*** This component is NOT Apache-2.0 and is the sole exception to the license
+*** of this repository as a whole. It may be used for NonCommercial purposes
+*** only, and adaptations of it must be shared under the same license.
+
+The file
+    src/rare/models/order/layoutreader_helpers/helpers.py
+is vendored verbatim from that project's v3/helpers.py (the LayoutLMv3
+input-encoding and logit-to-order decoding routines: DataCollator,
+boxes2inputs, prepare_inputs, parse_logits, check_duplicate). It carries a
+CC BY-NC-SA attribution header and is unmodified.
+
+The "layoutreader" reading-order backend at
+    src/rare/models/order/layoutreader.py
+is original RaRe code (Apache-2.0), but it calls the helpers above and loads
+the `hantian/layoutreader` LayoutLMv3 checkpoint
+(https://huggingface.co/hantian/layoutreader), which is likewise released
+under CC BY-NC-SA 4.0. Using this backend therefore carries the NonCommercial
+restriction, whether or not the helpers file is redistributed.
+
+That project is itself a LayoutLMv3-based reimplementation of LayoutReader,
+originally published by Microsoft Research
+(https://github.com/microsoft/unilm/tree/master/layoutreader); see the
+Citation section of README.md.

@@ -91,6 +91,7 @@ def run_pipeline(
     order,
     run_dir: Path,
     limit: Optional[int] = None,
+    start: Optional[int] = None,
     save_coco: bool = True,
     emit_omnidocbench: bool = True,
     category_map: Optional[dict[str, str]] = None,
@@ -134,6 +135,8 @@ def run_pipeline(
     pred_category_map = getattr(layout, "pred_category_map", None) or gt_category_map
 
     samples = list(dataset.iter_samples())
+    if start:
+        samples = samples[start:]
     if limit:
         samples = samples[:limit]
 
@@ -145,6 +148,8 @@ def run_pipeline(
             image=image,
             page_no=sample.page_no,
             pdf_stem=sample.pdf_stem,
+            img_path=sample.image_path,
+            pdf_root=pdfs_dir
         )
 
         if not run_omnidocbench:
@@ -174,6 +179,8 @@ def run_pipeline(
                     image=image,
                     page_no=sample.page_no,
                     pdf_stem=sample.pdf_stem,
+                    img_path=sample.image_path,
+                    pdf_root=pdfs_dir
                 )
                 # Store both permutations (over the SAME ground-truth boxes) so
                 # the GT-direct reading order can be compared side by side.

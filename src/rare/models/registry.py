@@ -48,6 +48,7 @@ _DEFERRED: dict[str, dict[str, str]] = {
     "order": {
         "top-bottom":             "rare.models.order.builtin",
         "paddlex-xy-cut":         "rare.models.order.xycut",
+        "layoutreader":           "rare.models.order.layoutreader",
     },
     "vlm": {
         # Specialized VLMs

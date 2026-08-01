@@ -12,7 +12,9 @@ from rare.models.registry import register
 class TopBottomBackend:
     """Sort regions by centroid y (then x)."""
 
-    def order(self, layout, *, image=None, page_no=None, pdf_stem=None) -> list[int]:
+    def order(
+        self, layout, *, image=None, page_no=None, pdf_stem=None, ocr_lines=None, img_path=None, pdf_root=None
+    ) -> list[int]:
         def centroid(block):
             x1, y1, x2, y2 = block.coordinates
             return (y1 + y2) / 2.0, (x1 + x2) / 2.0

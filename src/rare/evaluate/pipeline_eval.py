@@ -9,6 +9,7 @@ from rare.utils.evalutils import (
     mean_average_precision,
     kendall_tau,
     normalized_edit_distance,
+    bleu,
 )
 from rare.evaluate.omnidocbench import _resolve_map
 
@@ -17,9 +18,9 @@ if TYPE_CHECKING:
 
 
 LAYOUT_METRICS = {"map", "map_50", "map_75", "map_cat", "map_50_cat", "map_75_cat"}
-ORDER_METRICS = {"kendall_tau", "edit_distance", "matched_pairs"}
+ORDER_METRICS = {"kendall_tau", "edit_distance", "matched_pairs", "bleu"}
 # Reading order scored on ground-truth boxes directly (detection quality removed).
-ORDER_GT_METRICS = {"edit_distance_gt", "kendall_tau_gt", "order_regions_gt"}
+ORDER_GT_METRICS = {"edit_distance_gt", "kendall_tau_gt", "order_regions_gt", "bleu_gt"}
 METRICS = LAYOUT_METRICS | ORDER_METRICS | ORDER_GT_METRICS
 
 # Region categories that carry no position in the linear reading flow and are
@@ -110,6 +111,7 @@ def score_order(
     return {
         "kendall_tau":   kendall_tau(pred_ranks, ground_ranks), # TODO - check
         "edit_distance": normalized_edit_distance(pred_ranks, ground_ranks), # TODO - implementation of normalized Levenshtein distance
+        "bleu": bleu([[str(rank) for rank in ground_ranks]], [str(rank) for rank in pred_ranks]),
         "matched_pairs": float(len(matched)),
     }
 
@@ -159,6 +161,7 @@ def score_order_gt(
             "edit_distance_gt": 0.0,
             "kendall_tau_gt":   1.0,
             "order_regions_gt": float(len(gt_seq)),
+            "bleu_gt": 0.0,
             "ground_order": gt_seq,
             "predicted_order_gt": pred_seq,
         }
@@ -172,6 +175,7 @@ def score_order_gt(
     return {
         "edit_distance_gt": normalized_edit_distance(pred_seq, gt_seq),
         "kendall_tau_gt":   kendall_tau(pred_ranks, gt_ranks),
+        "bleu_gt": bleu([[str(rank) for rank in gt_ranks]], [str(rank) for rank in pred_ranks]),
         "order_regions_gt": float(len(gt_seq)),
         "ground_order": gt_seq,
         "predicted_order_gt": pred_seq,
