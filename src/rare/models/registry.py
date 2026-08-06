@@ -1,6 +1,6 @@
-"""Lazy backend registry shared by layout/order/VLM model adapters.
+"""Lazy backend registry shared by layout/order/VLM/NER model adapters.
 
-Each adapter file declares its class with `@register("layout"|"order"|"vlm", "<name>")`.
+Each adapter file declares its class with `@register("layout"|"order"|"vlm"|"ner", "<name>")`.
 Adapter files are imported on demand so that:
   - importing the registry is cheap (no heavy deps loaded);
   - the LAYOUTPARSER_BACKEND env var can be set before `import layoutparser`
@@ -20,6 +20,8 @@ _REGISTRIES: dict[str, dict[str, type]] = {
     "layout": {},
     "order": {},
     "vlm": {},
+    "ner": {},
+    "classification": {},
 }
 _DEFERRED: dict[str, dict[str, str]] = {
     "layout": {
@@ -71,6 +73,12 @@ _DEFERRED: dict[str, dict[str, str]] = {
 
         "qwen":                 "rare.models.vlm.qwen",
         "gemma":                 "rare.models.vlm.gemma",
+    },
+    "ner": {
+        "rudar-slv":            "rare.models.ner.rudar",
+    },
+    "classification": {
+        "gams":                 "rare.models.classification.gams",
     },
 }
 

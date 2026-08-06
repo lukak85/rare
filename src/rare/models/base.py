@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
 if TYPE_CHECKING:
     import layoutparser as lp
     from PIL.Image import Image
-    from rare.doc.schema import GlasanaDocument
+    from rare.doc.schema import Entity, GlasanaDocument
 
 
 @runtime_checkable
@@ -42,6 +42,7 @@ class ReadingOrderBackend(Protocol):
         image: Optional["Image"] = None,
         page_no: Optional[int] = None,
         pdf_stem: Optional[str] = None,
+        pdf_root: Optional[str] = None,
     ) -> list[int]: ...
 
 
@@ -52,3 +53,34 @@ class VLMBackend(Protocol):
     name: str
 
     def parse_pdf(self, pdf_path: str) -> "GlasanaDocument": ...
+
+
+@runtime_checkable
+class NERBackend(Protocol):
+    """Named-entity backend — annotates a batch of region texts.
+
+    Batch in, batch out: a magazine issue is 250-500 text items, so a
+    per-item call would dominate runtime for transformer-based backends.
+
+    Returns:
+        One list of Entity per input text, in the same order. Offsets are
+        character positions into the corresponding input string.
+    """
+
+    name: str
+
+    def extract(self, texts: list[str]) -> list[list["Entity"]]: ...
+
+
+@runtime_checkable
+class ClassificationBackend(Protocol):
+    """Classification backend — classifies an article as belonging to one
+    of the given categories.
+
+    Returns:
+        Category of the given article.
+    """
+
+    name: str
+
+    def classify(self, texts: str) -> str: ...

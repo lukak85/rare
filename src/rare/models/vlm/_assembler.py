@@ -1,8 +1,8 @@
 """Convert a VLMDocument into a full GlasanaDocument.
 
-Reuses the same Article-grouping logic as the pipeline track (Headline starts
-a new Article; subsequent items belong to it until the next Headline) so the
-two tracks produce structurally comparable outputs.
+Article grouping is delegated to `rare.parse.assemble.attach_to_article`, the
+same helper the pipeline track uses, so the two tracks produce structurally
+comparable outputs and the rule only exists in one place.
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ from rare.doc.schema import (
     BBox,
     FigureItem,
     GlasanaDocument,
-    HeadlineItem,
     LABEL_TO_CLASS,
     PageInfo,
     ParagraphItem,
     Provenance,
 )
 from rare.models.vlm._vlm_schema import VLMDocument
+from rare.parse.assemble import attach_to_article
 
 
 def _empty_bbox() -> BBox:
@@ -67,14 +67,8 @@ def assemble_document(
             else:
                 item = item_cls(text=region.text, **kwargs)
 
-            if isinstance(item, HeadlineItem):
-                current_article = Article(title=region.text)
-                doc.add_article(current_article)
-
-            if current_article is not None:
-                item.article_id = current_article.article_id
-                current_article.item_ids.append(item.item_id)
-
-            doc.add_item(item)
+            current_article = attach_to_article(
+                doc, item, region.text, current_article
+            )
 
     return doc

@@ -56,11 +56,23 @@ rare parse <pdf> --vlm claude
 # Pipeline track, with per-page Markdown for OmniDocBench's end2end evaluator
 rare parse <pdf> --layout doclayout-yolo --emit-omnidocbench
 
+# Choose the NER backend used by the linking stage
+rare parse <pdf> --layout doclayout-yolo --ner rudar-slv
+
 # Discover backends
 rare parse --list-models
 ```
 
-Outputs are stored in `outputs/parsed/<pdf_stem>/{<stem>.html, <stem>.md, <stem>_doc.json, figures/}`.
+Outputs are stored in `outputs/parsed/<pdf_stem>/{<stem>.html, <stem>.md, <stem>_doc.json, <stem>_articles.json, <stem>_articles.md, figures/}`.
+
+#### Linking
+
+After a document is assembled, a whole-document pass fills in the relationships a single page cannot show: named
+entities on every text region, captions bound to their figure (or, when there is no figure, to the closest article),
+articles made complete and ordered, and pieces continuing across a page break merged into one article. Every inference
+is also recorded in `doc.links` with the method, score and evidence behind it.
+
+`--ner rudar-slv` needs the NER extra (`pip install -e ".[ner]"`).
 
 On the pipeline track, `--emit-omnidocbench` additionally writes one Markdown file per page to `outputs/parsed/<pdf_stem>/omnidocbench/<stem>_<page>.md` — the flat `<image_stem>.md` layout OmniDocBench's end-to-end evaluator mounts at `data_md/predictions`. These pages are rendered from the regions **as the DLA model detected them**, before the heuristic pass that re-joins paragraphs split across columns or pages, so the score reflects the model's own segmentation. The regular `<stem>.md` (and `--per-page` output under `pages/`) stay merged.
 
@@ -209,11 +221,17 @@ The supported models (and therefore given Python version recommendations) were t
 {
   "source_pdf": "ac30fbcf...",
   "pages":     {"0": {"page_no": 0, "width": ..., "height": ...}, ...},
-  "items":     {"<uuid>": {"category": "Headline", "text": "...", "provenance": {...}}, ...},
+  "items":     {"<uuid>": {"category": "Headline", "text": "...", "provenance": {...},
+                           "entities": [{"text": "Mateja Haller", "label": "PER", "key": "matej haller"}]}, ...},
   "body_order": ["<uuid>", ...],
-  "articles":  {"<uuid>": {"title": "...", "item_ids": [...]}}
+  "articles":  {"<uuid>": {"title": "...", "item_ids": [...], "page_nos": [3, 4],
+                           "section": "ODMEVI", "entity_keys": [...], "continued": true}},
+  "links":     [{"kind": "caption-of", "from_id": "<uuid>", "to_id": "<uuid>",
+                 "method": "geometry", "score": 0.94, "evidence": []}]
 }
 ```
+
+`outputs/parsed/<pdf_stem>/<stem>_articles.json` is the denormalised counterpart — one entry per article with its items inlined in reading order, ready to render without joining `items` against `body_order`. `<stem>_articles.md` is the same grouping as Markdown.
 
 `outputs/evaluations/<run_id>/report.md` is a Markdown table — one row per model, one column per metric:
 
@@ -637,11 +655,21 @@ control and checking of calculations):
 
 #### Page wise breakdown of NED scores for best VLMs
 
-| Model               | Type                    | Text block NED    | Reading order NED |
-|---------------------|-------------------------|-------------------|-------------------|
-| dots.ocr            | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
-| Marker              | Default                 | 0.0461            | 0.1033            |
-| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
+Comparisson of the best performing VLMs compared to our implementation
+
+| Model         | Type                          | Text block NED    | Reading order NED |
+|---------------|-------------------------------|-------------------|-------------------|
+| dots.ocr      | dots.mocr                     | <ins>0.0420</ins> | **0.0765**        |
+| Marker        | Default                       | 0.0461            | 0.1033            |
+| Youtu-Parsing | Youtu-LLM-2B-Base             | **0.0383**        | <ins>0.0874</ins> |
+| Ours*         | DocLayout-YOLO + LayoutReader | 0.0694            | 0.1899            |
+
+\* Due to ground truth being obtained using bounding boxes but same OCR-ed letters, the text block NED is not directly
+comparable to the other VLMs, but is included for reference.
+
+<ins>**Page wise breakdown**</ins>:
+
+TODO
 
 # Demo
 

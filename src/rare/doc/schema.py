@@ -176,6 +176,21 @@ class PageInfo(BaseModel):
 # DocItem base + TextItem
 # ---------------------------------------------------------------------------
 
+class Entity(BaseModel):
+    """A named entity found in an item's text.
+
+    `key` is the normalised matching form (see rare.models.ner.normalize):
+    Slovenian is heavily inflected, so "Haller", "Hallerja" and "Hallerjem"
+    must collapse to one key before entity overlap means anything.
+    """
+    text: str                            # surface form, as printed
+    label: str                           # PER | LOC | ORG | MISC
+    start: int = 0                       # char offset into the owning item's text
+    end: int = 0
+    score: float = 1.0
+    key: str = ""
+
+
 class DocItem(BaseModel):
     item_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     category: RegionCategory
@@ -183,6 +198,7 @@ class DocItem(BaseModel):
     provenance: Provenance
     article_id: Optional[str] = None
     reading_order: Optional[int] = None
+    entities: List[Entity] = Field(default_factory=list)
 
 
 class TextItem(DocItem):
@@ -361,11 +377,42 @@ class UnorderedListItem(DocItem):
 # ---------------------------------------------------------------------------
 
 class Article(BaseModel):
-    """A logical grouping of DocItems belonging to the same editorial piece."""
+    """A logical grouping of DocItems belonging to the same editorial piece.
+
+    An article may span several pages: `page_nos` lists every page it touches,
+    and `continued` marks one that was stitched together from a jump/
+    continuation elsewhere in the magazine. The evidence for that stitch lives
+    in `GlasanaDocument.links` as an "article-continues" Link.
+    """
     article_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = ""
     # item_ids: list[str] = Field(default_factory=list)
     item_ids: List[str] = Field(default_factory=list)
+    page_nos: List[int] = Field(default_factory=list)
+    section: Optional[str] = None        # running header, e.g. "ODMEVI"
+    entity_keys: List[str] = Field(default_factory=list)
+    continued: bool = False
+
+
+class Link(BaseModel):
+    """A typed edge between two items, or between two articles.
+
+    Everything the linking passes infer is recorded here rather than being
+    silently folded into the grouping, so a merge can be audited (and undone)
+    by looking at `method`, `score` and `evidence`.
+    """
+    link_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    kind: Literal[
+        "caption-of",           # caption/figbyline -> figure    (item -> item)
+        "caption-to-article",   # orphaned caption  -> article   (item -> article)
+        "article-continues",    # article absorbed a continuation (article -> article)
+        "entity-overlap",       # items sharing a rare named entity (item -> item)
+    ]
+    from_id: str
+    to_id: str
+    score: float = 0.0
+    method: str = ""             # geometry | ner | header | header+ner | reading-order
+    evidence: List[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +458,7 @@ class GlasanaDocument(BaseModel):
     articles: Dict[str, Article] = Field(default_factory=dict)
     # pages: dict[int, PageInfo] = Field(default_factory=dict)
     pages: Dict[int, PageInfo] = Field(default_factory=dict)
+    links: List[Link] = Field(default_factory=list)
 
     def get_item(self, item_id: str) -> Optional[AnyDocItem]:
         return self.items.get(item_id)
@@ -446,9 +494,32 @@ class GlasanaDocument(BaseModel):
             self.body_order.append(item.item_id)
         return item.item_id
 
+    def iter_articles(self) -> Iterable[Article]:
+        """Yield articles in document order.
+
+        Ordered by where each article's earliest item sits in `body_order`, so
+        rendering an article at a time still walks the magazine front to back.
+        Articles whose items are all furniture (no body_order position) sort
+        last, in insertion order.
+        """
+        position = {iid: i for i, iid in enumerate(self.body_order)}
+        fallback = len(position)
+
+        def first_position(article: Article) -> int:
+            return min(
+                (position[iid] for iid in article.item_ids if iid in position),
+                default=fallback,
+            )
+
+        return sorted(self.articles.values(), key=first_position)
+
     def add_article(self, article: Article) -> str:
         self.articles[article.article_id] = article
         return article.article_id
+
+    def add_link(self, link: Link) -> str:
+        self.links.append(link)
+        return link.link_id
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ def parse_pdf(
     per_page: bool = False,
     save_coco: bool = False,
     emit_omnidocbench: bool = False,
+    linker=None,
 ) -> Path:
     """Run layout detection, reading-order, text extraction, and assembly on a PDF.
 
@@ -72,6 +73,11 @@ def parse_pdf(
     `merge_flowing_paragraphs` re-joins paragraphs split across columns or
     pages, so the export scores the DLA model's own segmentation rather than
     our post-processing. The regular `{stem}.md` / `pages/` outputs stay merged.
+
+    `linker`, when given, is called once with the finished document before it is
+    written — see `rare.link.link_document`. It runs here rather than inside
+    `write_outputs` so the throw-away single-page documents built for the
+    OmniDocBench export are left untouched.
     """
     pdf_path = Path(pdf_path)
     pdf_stem = pdf_path.stem
@@ -103,6 +109,7 @@ def parse_pdf(
                 image=page_image,
                 page_no=page_no,
                 pdf_stem=pdf_stem,
+                pdf_root=str(pdf_path.parent),
             )
 
             if save_coco:
@@ -162,6 +169,9 @@ def parse_pdf(
     if save_coco and coco_predictions:
         coco_data = _join_coco_pages(coco_predictions)
         save_coco_to_json(coco_data, str(out_dir / f"{pdf_stem}_coco.json"))
+
+    if linker is not None:
+        linker(doc)
 
     return write_outputs(doc, output_dir, per_page=per_page)
 

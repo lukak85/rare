@@ -114,6 +114,7 @@ def parse_coco(
     dpi: int = 200,
     emit_omnidocbench: bool = False,
     category_map: Optional[dict[str, str]] = None,
+    linker=None,
 ) -> list[Path]:
     """Render every document described by a COCO file to HTML / MD / JSON.
 
@@ -130,6 +131,9 @@ def parse_coco(
     region's `text` filled from the same PDF crops (so VLM markdown can be
     scored against it end-to-end). `category_map` overrides the default
     source-name → OmniDocBench `category_type` map.
+
+    `linker`, when given, is called with each finished document before it is
+    written — see `rare.link.link_document`.
     """
     coco = COCO(str(coco_path))
     images_dir = Path(images_dir) if images_dir else None
@@ -204,6 +208,8 @@ def parse_coco(
             if pdf is not None:
                 pdf.close()
 
+        if linker is not None:
+            linker(doc)
         out_dirs.append(write_outputs(doc, output_dir))
 
     if emit_omnidocbench:

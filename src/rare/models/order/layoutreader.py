@@ -293,14 +293,12 @@ class LayoutReaderBackend:
 
         pdf_name = (
             f"{pdf_root}" if str(pdf_root)[-1] == "/" else f"{pdf_root}/"
-            f"{str(img_path).split('/')[-1].split('_')[0]}.pdf"
+            f"{pdf_stem}.pdf"
         )
         doc = fitz.open(pdf_name)
-        page_no = int(str(img_path).split('_')[-1].split('.')[0])
         page = doc[page_no]
-        print(page_no, pdf_name)
 
-        img = Image.open(img_path)
+        img = Image.open(img_path) if img_path else image
         W, H = img.size
 
         page_w, page_h = page.rect.width, page.rect.height

@@ -66,7 +66,9 @@ def to_markdown_pages(doc: GlasanaDocument, raw: bool = False) -> dict[int, str]
     }
 
 
-def to_markdown(doc: GlasanaDocument, raw: bool = False) -> str:
+def to_markdown(
+    doc: GlasanaDocument, raw: bool = False, by_article: bool = False
+) -> str:
     """Render body content as GitHub-Flavored Markdown.
 
     With `raw=True`, emit each body item's text verbatim (joined by blank
@@ -74,7 +76,15 @@ def to_markdown(doc: GlasanaDocument, raw: bool = False) -> str:
     that already produce their own markdown per block (e.g. MinerU's
     `images_to_markdown`, which concatenates each block's `content`), so
     OmniDocBench scores the model's own text rather than text we re-marked-up.
+
+    With `by_article=True`, group the output one article at a time, each under
+    its title and page span, instead of a single flat reading-order stream.
+    The default stays flat so text-similarity scores stay comparable with
+    earlier runs.
     """
+    if by_article and not raw:
+        return _to_markdown_by_article(doc)
+
     if raw:
         parts = [
             item.text
@@ -173,6 +183,43 @@ def to_markdown(doc: GlasanaDocument, raw: bool = False) -> str:
     return "\n".join(lines)
 
 
+def _to_markdown_by_article(doc: GlasanaDocument) -> str:
+    """One section per article, each headed by its title and page span."""
+    chunks: list[str] = []
+    for article_id, item_ids in _article_blocks(doc):
+        article = doc.articles.get(article_id) if article_id else None
+
+        heading: list[str] = []
+        if article is not None:
+            title = article.title.strip() or "(untitled)"
+            heading.append(f"## {title}")
+            # The article heading already shows the title; emitting the
+            # HeadlineItem too would print it twice in a row.
+            if item_ids:
+                first = doc.items.get(item_ids[0])
+                if (
+                    isinstance(first, HeadlineItem)
+                    and first.text.strip() == article.title.strip()
+                ):
+                    item_ids = item_ids[1:]
+            meta = []
+            if article.page_nos:
+                pages = ", ".join(str(p) for p in article.page_nos)
+                meta.append(f"pages {pages}")
+            if article.section:
+                meta.append(article.section)
+            if article.continued:
+                meta.append("continued")
+            if meta:
+                heading.append(f"*{' — '.join(meta)}*")
+            heading.append("")
+
+        body = to_markdown(doc.model_copy(update={"body_order": item_ids}))
+        chunks.append("\n".join(heading + [body]).strip())
+
+    return "\n\n".join(chunk for chunk in chunks if chunk) + "\n"
+
+
 def _table_to_markdown(td: TableData) -> list[str]:
     grid = [[""] * td.num_cols for _ in range(td.num_rows)]
     for cell in td.cells:
@@ -190,13 +237,51 @@ def _table_to_markdown(td: TableData) -> list[str]:
 # HTML renderer
 # ---------------------------------------------------------------------------
 
+def _article_blocks(doc: GlasanaDocument) -> list[tuple[Optional[str], list[str]]]:
+    """Split body_order into (article_id, item_ids) blocks, in document order.
+
+    Grouping is driven by `Article.item_ids`, so every item of an article is
+    emitted together even when another article's items are interleaved with it
+    in reading order — which happens whenever a piece continues after a jump.
+    Items belonging to no article keep their place in the flow and are grouped
+    into anonymous runs rather than being dumped at the end.
+    """
+    position = {iid: i for i, iid in enumerate(doc.body_order)}
+    body = set(doc.body_order)
+    claimed: set[str] = set()
+
+    blocks: list[tuple[int, Optional[str], list[str]]] = []
+    for article in doc.articles.values():
+        item_ids = [iid for iid in article.item_ids if iid in body]
+        if not item_ids:
+            continue
+        item_ids.sort(key=lambda iid: position[iid])
+        claimed.update(item_ids)
+        blocks.append((position[item_ids[0]], article.article_id, item_ids))
+
+    # Unclaimed items form anonymous blocks, one per contiguous run.
+    run: list[str] = []
+    for iid in doc.body_order:
+        if iid in claimed:
+            if run:
+                blocks.append((position[run[0]], None, run))
+                run = []
+            continue
+        run.append(iid)
+    if run:
+        blocks.append((position[run[0]], None, run))
+
+    blocks.sort(key=lambda b: b[0])
+    return [(article_id, item_ids) for _, article_id, item_ids in blocks]
+
+
 def to_html(doc: GlasanaDocument, wrap_articles: bool = True, css_path: str = "glasana.css") -> str:
     """Render body content as semantic HTML5.
 
-    Walks body_order directly so items always appear in reading order.
-    <article> tags open/close as article_id changes — orphaned items
-    (no article_id) are wrapped in their own anonymous <article> at the
-    correct position in the flow, not dumped at the end.
+    With `wrap_articles`, each Article becomes one <article> element carrying
+    its title and page span; items belonging to no article are wrapped in an
+    anonymous <article> at the right point in the flow. Without it, body items
+    are emitted in plain reading order.
     """
     title = doc.source_pdf or "Glasana"
     parts = [
@@ -214,21 +299,18 @@ def to_html(doc: GlasanaDocument, wrap_articles: bool = True, css_path: str = "g
     seen: set[str] = set()
 
     if wrap_articles:
-        current_art_id: Optional[str] = "##sentinel##"  # forces first open
-
-        for item in doc.iter_body():
-            if item.article_id != current_art_id:
-                # Close previous article if one was open
-                if current_art_id != "##sentinel##":
-                    parts += ["</div>", "</article>"]
-                current_art_id = item.article_id
-                art = doc.articles.get(current_art_id) if current_art_id else None
-                art_id_attr = f' id="{current_art_id}"' if current_art_id else ""
-                parts += [f"<article{art_id_attr}>", '<div class="article-body">']
-
-            parts.extend(_item_to_html(item, doc, seen))
-
-        if current_art_id != "##sentinel##":
+        for article_id, item_ids in _article_blocks(doc):
+            article = doc.articles.get(article_id) if article_id else None
+            parts.append(f"<article{_article_attrs(article)}>")
+            if article is not None and article.title.strip():
+                parts.append(
+                    f'<h1 class="article-title">{article.title}</h1>'
+                )
+            parts.append('<div class="article-body">')
+            for iid in item_ids:
+                item = doc.items.get(iid)
+                if item is not None:
+                    parts.extend(_item_to_html(item, doc, seen))
             parts += ["</div>", "</article>"]
     else:
         parts.append('<div class="article-body">')
@@ -238,6 +320,22 @@ def to_html(doc: GlasanaDocument, wrap_articles: bool = True, css_path: str = "g
 
     parts += ["</div>", "</body>", "</html>"]
     return "\n".join(parts)
+
+
+def _article_attrs(article) -> str:
+    """id / section / page-span attributes for an <article> element."""
+    if article is None:
+        return ""
+    attrs = [f'id="{article.article_id}"']
+    if article.page_nos:
+        attrs.append(
+            'data-pages="{}"'.format(",".join(str(p) for p in article.page_nos))
+        )
+    if article.section:
+        attrs.append(f'data-section="{article.section}"')
+    if article.continued:
+        attrs.append('data-continued="true"')
+    return " " + " ".join(attrs)
 
 
 def _prov_attrs(item: DocItem) -> str:

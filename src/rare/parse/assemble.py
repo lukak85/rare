@@ -24,6 +24,34 @@ from rare.doc.schema import (
 from rare.parse.figures import crop_and_save_figure
 
 
+def attach_to_article(
+    doc: GlasanaDocument,
+    item: AnyDocItem,
+    text: str,
+    current_article: Optional[Article],
+) -> Optional[Article]:
+    """Register `item` on `doc`, grouped under the article it belongs to.
+
+    The seed heuristic: a Headline opens a new article and everything after it
+    belongs to that article until the next Headline. It is deliberately crude —
+    `rare.link.articles` revisits the result with the whole document in view,
+    where jump headlines and page-spanning pieces can actually be resolved.
+
+    Shared by the pipeline/COCO assembler and the VLM assembler so the rule
+    exists once. Returns the (possibly new) current article.
+    """
+    if isinstance(item, HeadlineItem):
+        current_article = Article(title=text)
+        doc.add_article(current_article)
+
+    if current_article is not None:
+        item.article_id = current_article.article_id
+        current_article.item_ids.append(item.item_id)
+
+    doc.add_item(item)
+    return current_article
+
+
 def assemble_page(
     doc: GlasanaDocument,
     page_no: int,
@@ -68,14 +96,6 @@ def assemble_page(
         else:
             item = item_cls(text=text, **kwargs)
 
-        if isinstance(item, HeadlineItem):
-            current_article = Article(title=text)
-            doc.add_article(current_article)
-
-        if current_article is not None:
-            item.article_id = current_article.article_id
-            current_article.item_ids.append(item.item_id)
-
-        doc.add_item(item)
+        current_article = attach_to_article(doc, item, text, current_article)
 
     return current_article

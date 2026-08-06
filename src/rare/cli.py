@@ -18,24 +18,58 @@ def _read_config(path: str | None) -> dict | None:
     return json.loads(Path(path).read_text())
 
 
-def _make_order(name: str, config_path: str | None = None, pdf_root=None):
-    """Instantiate a reading-order backend.
+def _make_backend(kind: str, name: str, config_path: str | None = None, **extra):
+    """Instantiate a registry backend, passing a config only if it takes one.
 
-    For order backends that accept a `config` dict (e.g. `layoutreader`)
-    also get `pdf_root` filled in from the PDFs already named on the command line,
-    so line-level ordering works without repeating the path in
-    a config file. An explicit `pdf_root` in the config wins.
+    `extra` supplies defaults the CLI can infer (e.g. `pdf_root` from the PDF
+    already named on the command line, so line-level ordering works without
+    repeating the path in a config file). Explicit config keys always win.
     """
     import inspect
 
-    cls = get("order", name)
+    cls = get(kind, name)
     if "config" not in inspect.signature(cls.__init__).parameters:
         return cls()
 
     cfg = dict(_read_config(config_path) or {})
-    if pdf_root and not cfg.get("pdf_root"):
-        cfg["pdf_root"] = str(pdf_root)
+    for key, value in extra.items():
+        if value and not cfg.get(key):
+            cfg[key] = str(value)
     return cls(config=cfg)
+
+
+def _make_order(name: str, config_path: str | None = None, pdf_root=None):
+    """Instantiate a reading-order backend."""
+    return _make_backend("order", name, config_path, pdf_root=pdf_root)
+
+
+def _make_ner(args: argparse.Namespace):
+    """Instantiate the NER backend for the linking stage, or None.
+
+    Linking is best-effort: the model extras are installed per backend, so a
+    missing `transformers`/`torch` must degrade the result (geometry-only
+    linking) rather than fail an otherwise successful parse.
+    """
+    if not getattr(args, "ner", None):
+        return None
+    try:
+        return _make_backend("ner", args.ner, None)
+    except Exception as exc:  # noqa: BLE001 — any import/init failure is non-fatal
+        print(
+            f"warning: NER backend '{args.ner}' unavailable ({exc}); "
+            "linking will run without named entities.",
+            file=sys.stderr,
+        )
+        return None
+
+
+def _link(doc, args: argparse.Namespace):
+    """Run the whole-document linking passes unless --no-link was given."""
+    from rare.link import link_document
+
+    return link_document(
+        doc, ner=_make_ner(args), config=_read_config(getattr(args, "link_config", None))
+    )
 
 
 def cmd_parse(args: argparse.Namespace) -> int:
@@ -48,6 +82,12 @@ def cmd_parse(args: argparse.Namespace) -> int:
             print(f"  - {n}")
         print("\nVLM backends:")
         for n in list_backends("vlm"):
+            print(f"  - {n}")
+        print("\nNER backends (linking stage):")
+        for n in list_backends("ner"):
+            print(f"  - {n}")
+        print("\nClassification backends:")
+        for n in list_backends("classification"):
             print(f"  - {n}")
         return 0
 
@@ -82,6 +122,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
             dpi=args.dpi,
             emit_omnidocbench=args.emit_omnidocbench,
             category_map=category_map,
+            linker=None if args.no_link else (lambda doc: _link(doc, args)),
         )
         for out in out_dirs:
             print(f"Output written to: {out}")
@@ -113,6 +154,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
         vlm_cls = get("vlm", args.vlm)
         vlm = vlm_cls(config=_read_config(args.config))
         doc = vlm.parse_pdf(args.pdf)
+        _link(doc, args)
         out = write_outputs(doc, args.output)
         print(f"Output written to: {out}")
         return 0
@@ -139,6 +181,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
         per_page=args.per_page,
         save_coco=args.emit_coco,
         emit_omnidocbench=args.emit_omnidocbench,
+        linker=(lambda doc: _link(doc, args)),
     )
     print(f"Output written to: {out}")
     if args.emit_coco:
@@ -291,6 +334,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--per-page",
         action="store_true",
         help="Output Markdown in per-page format.",
+    )
+    p_parse.add_argument(
+        "--ner",
+        default="rudar-slv",
+        help="NER backend used by the linking stage. Default: rudar-slv (Slovenian).",
+    )
+    p_parse.add_argument(
+        "--classification",
+        default="gams",
+        help="Classification of resulting articles.",
     )
     p_parse.add_argument(
         "--emit-omnidocbench",

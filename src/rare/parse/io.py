@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from rare.doc.articles_json import to_articles
 from rare.doc.renderers import to_html, to_markdown, to_markdown_pages
 from rare.doc.schema import GlasanaDocument
 
@@ -14,6 +16,10 @@ def write_outputs(
     per_page: bool = False,
 ) -> Path:
     """Write `{stem}.{html,md}` and `{stem}_doc.json` to `<output_root>/<stem>/`.
+
+    Also writes `{stem}_articles.json`, the denormalised per-article view (see
+    `rare.doc.articles_json`), and `{stem}_articles.md`, the same content
+    grouped one article at a time rather than as a flat reading-order stream.
 
     When `per_page` is True, also write one Markdown file per page into a
     `pages/` subdirectory as `{stem}_{page_no}.md` (the `<stem>_<page>` naming
@@ -28,6 +34,12 @@ def write_outputs(
     (out_dir / f"{stem}_doc.json").write_text(doc.model_dump_json(indent=2))
     (out_dir / f"{stem}.md").write_text(to_markdown(doc))
     (out_dir / f"{stem}.html").write_text(to_html(doc))
+    (out_dir / f"{stem}_articles.json").write_text(
+        json.dumps(to_articles(doc), ensure_ascii=False, indent=2)
+    )
+    (out_dir / f"{stem}_articles.md").write_text(
+        to_markdown(doc, by_article=True)
+    )
 
     if per_page:
         pages_dir = out_dir / "pages"
