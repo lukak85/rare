@@ -37,7 +37,18 @@ class GamsClassification:
         )
 
         self.classes = list(cfg.get("classes") or [
-            "recenzija", "novica", "kviz", "pisma", "naslov", "reklama", "informativni členek", "intervju"
+            "reklama",
+            "članek", # "(informativni) članek",
+            "naslovnica",
+            "dogodki",
+            "slike",
+            "intervju",
+            "pisma" # "pisma (bralcev)",
+            "novice",
+            "kviz",
+            "recenzija", # records,
+            # "posebno",
+            "kazalo"
         ])
 
     def _prompt_class(self, text: str) -> str:
