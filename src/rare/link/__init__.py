@@ -10,6 +10,7 @@ fills in the relationships that need that wider context:
 4. `crosspage.merge_continuations` — a piece split across pages becomes one
 5. `captions.attach_orphans`  — figure-less captions -> nearest article
 6. `entities.cross_link`      — items sharing a rare entity, across articles
+7. `classify.classify_articles` — editorial genre per finished article
 
 Order matters: captions are attached after the merge so "nearest article"
 means the final article, and the merge runs after `rebuild` so it can use
@@ -25,7 +26,7 @@ import logging
 from typing import Optional
 
 from rare.doc.schema import GlasanaDocument
-from rare.link import articles, captions, crosspage, entities, figures
+from rare.link import articles, captions, classify, crosspage, entities, figures
 from rare.link.config import LinkConfig
 
 logger = logging.getLogger(__name__)
@@ -36,13 +37,14 @@ __all__ = ["link_document", "LinkConfig"]
 def link_document(
     doc: GlasanaDocument,
     ner=None,
+    classifier=None,
     config: dict | LinkConfig | None = None,
 ) -> GlasanaDocument:
     """Run every linking pass over `doc`, in place. Returns the same document.
 
-    `ner` may be None — the passes that need entities then contribute nothing
-    and the geometric ones still run, so a missing model degrades the result
-    rather than failing the parse.
+    `ner` and `classifier` may both be None — the passes that need them then
+    contribute nothing and the geometric ones still run, so a missing model
+    degrades the result rather than failing the parse.
     """
     cfg = config if isinstance(config, LinkConfig) else LinkConfig.from_dict(config)
 
@@ -60,12 +62,16 @@ def link_document(
     # attached = captions.attach_orphans(doc, index, cfg) # TODO: probably not needed; captions are already linked to figures and articles in the previous steps
     entities.cross_link(doc, index, cfg)
 
+    # Last: articles are final here, so a piece that spanned two pages is
+    # classified once, from its whole text.
+    classified = classify.classify_articles(doc, classifier, cfg)
+
     logger.info(
-        "linked %d captions to figures, attached %d to articles, "
-        "merged %d continuations, %d articles remain",
+        "linked %d captions to figures, merged %d continuations, "
+        "classified %d articles, %d articles remain",
         linked_captions,
-        attached,
         merged,
+        classified,
         len(doc.articles),
     )
     return doc

@@ -333,6 +333,8 @@ def _article_attrs(article) -> str:
         )
     if article.section:
         attrs.append(f'data-section="{article.section}"')
+    if article.genre:
+        attrs.append(f'data-genre="{article.genre}"')
     if article.continued:
         attrs.append('data-continued="true"')
     return " " + " ".join(attrs)

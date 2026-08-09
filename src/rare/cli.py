@@ -63,12 +63,35 @@ def _make_ner(args: argparse.Namespace):
         return None
 
 
+def _make_classifier(args: argparse.Namespace):
+    """Instantiate the article-genre backend for the linking stage, or None.
+
+    Best-effort for the same reason as `_make_ner`, and more so: these are
+    large generative models whose weights may simply not be present.
+    """
+    name = getattr(args, "classification", None)
+    if not name or name.lower() == "none":
+        return None
+    try:
+        return _make_backend("classification", name, getattr(args, "classification_config", None))
+    except Exception as exc:  # noqa: BLE001 — any import/init failure is non-fatal
+        print(
+            f"warning: classification backend '{name}' unavailable ({exc}); "
+            "articles will be left unclassified.",
+            file=sys.stderr,
+        )
+        return None
+
+
 def _link(doc, args: argparse.Namespace):
     """Run the whole-document linking passes unless --no-link was given."""
     from rare.link import link_document
 
     return link_document(
-        doc, ner=_make_ner(args), config=_read_config(getattr(args, "link_config", None))
+        doc,
+        ner=_make_ner(args),
+        classifier=_make_classifier(args),
+        config=_read_config(getattr(args, "link_config", None)),
     )
 
 
@@ -343,7 +366,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_parse.add_argument(
         "--classification",
         default="gams",
-        help="Classification of resulting articles.",
+        help="Backend that tags each article with an editorial genre "
+             "(recenzija, novica, intervju, ...). Default: gams. Use "
+             "'--classification none' to skip it — gams loads a 12B model.",
+    )
+    p_parse.add_argument(
+        "--classification-config",
+        dest="classification_config",
+        help="JSON config for the classification backend.",
     )
     p_parse.add_argument(
         "--emit-omnidocbench",

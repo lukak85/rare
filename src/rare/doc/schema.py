@@ -392,6 +392,9 @@ class Article(BaseModel):
     section: Optional[str] = None        # running header, e.g. "ODMEVI"
     entity_keys: List[str] = Field(default_factory=list)
     continued: bool = False
+    # Editorial genre from a ClassificationBackend, e.g. "intervju", "novica".
+    # None when no classifier ran or it produced nothing usable.
+    genre: Optional[str] = None
 
 
 class Link(BaseModel):

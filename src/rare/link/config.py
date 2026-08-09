@@ -45,6 +45,11 @@ class LinkConfig:
     # Only consider articles this many pages apart.
     max_page_gap: int = 1
 
+    # --- article classification -----------------------------------------------
+    # How much of an article's text the classifier sees. Generative backends
+    # are charged per token and the genre is evident from the opening.
+    classify_max_chars: int = 4000
+
     @classmethod
     def from_dict(cls, config: dict | None) -> "LinkConfig":
         """Build from a JSON config, ignoring keys that aren't ours."""
