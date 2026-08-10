@@ -168,6 +168,52 @@ def split_into_columns(words: Sequence[Mapping]) -> list[list[Mapping]]:
     return [column for column in columns if column]
 
 
+def _cluster_by_top(
+    words: Sequence[Mapping], line_tolerance: float
+) -> list[list[Mapping]]:
+    """Group a column's words into lines by the top of their glyph boxes."""
+    lines: list[list[Mapping]] = []
+    line_top: float | None = None
+    for word in sorted(words, key=lambda w: (w["top"], w["x0"])):
+        if line_top is None or word["top"] - line_top > line_tolerance:
+            lines.append([])
+            line_top = word["top"]
+        lines[-1].append(word)
+    return lines
+
+
+def _merge_shared_baselines(
+    lines: Sequence[Sequence[Mapping]], line_tolerance: float
+) -> list[list[Mapping]]:
+    """Rejoin lines that `_cluster_by_top` split across a single baseline.
+
+    A line setting two type sizes — a bold lead-in, a run-in head — puts all
+    its words on one baseline, but their tops sit an ascender apart, which at
+    display sizes exceeds `line_tolerance`. Clustering by ``top`` then splits
+    one visual line in two and emits the larger type first, reversing the
+    halves whenever the larger type is not the leftmost: the running header
+    "od tam **in tod**..." came back as "in tod od tam".
+
+    Merging on ``bottom`` afterwards, rather than clustering on it throughout,
+    is what keeps drop caps intact. A capital spanning three lines shares its
+    top with the first of them but bottoms out level with the last, so
+    clustering by ``bottom`` would strand it mid-paragraph; here its bottom
+    lies nowhere near its neighbours' and no merge fires.
+    """
+    merged: list[list[Mapping]] = []
+    for line in lines:
+        baseline = _median([w["bottom"] for w in line])
+        if (
+            merged
+            and abs(_median([w["bottom"] for w in merged[-1]]) - baseline)
+            <= line_tolerance
+        ):
+            merged[-1].extend(line)
+        else:
+            merged.append(list(line))
+    return merged
+
+
 def words_to_text(
     words: Sequence[Mapping], *, line_tolerance: float = LINE_TOLERANCE
 ) -> str:
@@ -183,12 +229,11 @@ def words_to_text(
 
     lines: list[list[Mapping]] = []
     for column in split_into_columns(words):
-        line_top: float | None = None
-        for word in sorted(column, key=lambda w: (w["top"], w["x0"])):
-            if line_top is None or word["top"] - line_top > line_tolerance:
-                lines.append([])
-                line_top = word["top"]
-            lines[-1].append(word)
+        lines.extend(
+            _merge_shared_baselines(
+                _cluster_by_top(column, line_tolerance), line_tolerance
+            )
+        )
 
     return "\n".join(
         " ".join(w["text"] for w in sorted(line, key=lambda w: w["x0"]))
