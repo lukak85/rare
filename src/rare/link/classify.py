@@ -117,10 +117,11 @@ def article_text(
     and say nothing.
     """
     parts: list[str] = []
-    if include_section and header_tokens(article.section):
+    if include_section: #and header_tokens(article.section):
         parts.append(f"Rubrika: {(article.section or '').strip()}")
-    if article.title.strip():
-        parts.append(article.title.strip())
+    # if article.title.strip():
+    #    parts.append(f"Naslov: {(article.title  or '').strip()}")
+    parts.append("Besedilo: ")
 
     budget = max_chars - sum(len(part) for part in parts)
     for item_id in article.item_ids:
