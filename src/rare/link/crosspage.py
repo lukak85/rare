@@ -13,6 +13,9 @@ Signals, none of which is trusted alone:
   from the facing page into the header, so equality never holds);
 * rare named entities in common;
 * a sentence running straight across the seam.
+
+A change of running header vetoes the merge outright, whatever those signals
+say: a piece does not resume in a different section of the magazine.
 """
 
 from __future__ import annotations
@@ -21,9 +24,15 @@ import difflib
 import re
 
 from rare.doc.schema import Article, GlasanaDocument, Link, TextItem
-from rare.link.articles import refresh
+from rare.link.articles import (
+    header_similarity,
+    header_tokens,
+    refresh,
+    same_section,
+)
 from rare.link.config import LinkConfig
 from rare.link.entities import EntityIndex
+from rare.link.split import split_group
 from rare.parse.merge import _ends_sentence, _is_continuation
 
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -40,17 +49,21 @@ def _title_similarity(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, left, right).ratio()
 
 
-def _header_similarity(a: str | None, b: str | None) -> float:
-    """Token-overlap between two running headers.
+def _section_changed(first: Article, second: Article, config: LinkConfig) -> bool:
+    """True when the two sit under headers naming different sections.
 
-    Token-set rather than string similarity: the real section name survives
-    the mirrored noise as a token, while the noise itself does not repeat.
+    Only decides when both headers are actually readable: a missing or
+    unusable header means "unknown", which must not read as a change, or every
+    article on a page whose header went undetected would be walled off.
     """
-    left = {t for t in _WORD.findall((a or "").casefold()) if len(t) > 2}
-    right = {t for t in _WORD.findall((b or "").casefold()) if len(t) > 2}
-    if not left or not right:
-        return 0.0
-    return len(left & right) / min(len(left), len(right))
+    if not header_tokens(first.section) or not header_tokens(second.section):
+        return False
+    return not same_section(
+        first.section,
+        second.section,
+        config.section_change_max_similarity,
+        config.section_change_min_char_similarity,
+    )
 
 
 def _text_items(doc: GlasanaDocument, article: Article) -> list[TextItem]:
@@ -92,7 +105,7 @@ def _score(
         score += config.untitled_weight
         methods.append("untitled")
 
-    header_sim = _header_similarity(first.section, second.section)
+    header_sim = header_similarity(first.section, second.section)
     if header_sim > 0:
         score += config.header_weight * header_sim
         methods.append("header")
@@ -151,6 +164,17 @@ def merge_continuations(
             if second.article_id not in doc.articles:
                 continue
             if not first.page_nos or not second.page_nos:
+                continue
+            # Two pieces of one column are distinct by construction. They would
+            # otherwise score well against each other: a column shares its
+            # running header throughout and its pieces are about one subject.
+            if split_group(first) == split_group(second):
+                continue
+            # A piece does not resume in a different section of the magazine,
+            # however much else the two have in common.
+            if config.veto_merge_on_section_change and _section_changed(
+                first, second, config
+            ):
                 continue
             # Only a piece that resumes on the same or the next page.
             if not (

@@ -43,7 +43,7 @@ class GamsClassification:
             "dogodki",
             "slike",
             "intervju",
-            "pisma" # "pisma (bralcev)",
+            "pisma",  # "pisma (bralcev)",
             "novice",
             "kviz",
             "recenzija", # records,

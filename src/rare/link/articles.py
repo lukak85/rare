@@ -12,7 +12,9 @@ problems this pass cleans up:
 
 from __future__ import annotations
 
+import difflib
 import re
+import unicodedata
 from collections import defaultdict
 from typing import Optional
 
@@ -29,8 +31,13 @@ from rare.link.entities import EntityIndex
 # How many of an article's rarest entity keys to surface in the JSON.
 TOP_ENTITY_KEYS = 10
 
+# A running header is a couple of words. Anything longer is a caption or a
+# standfirst the detector labelled Header by mistake.
+DEFAULT_HEADER_MAX_WORDS = 8
+
 
 _MIXED_CASE = re.compile(r"[a-zčšžćđ][A-ZČŠŽĆĐ]")
+_WORD = re.compile(r"\w+", re.UNICODE)
 
 
 def clean_header(text: str) -> str:
@@ -52,13 +59,91 @@ def clean_header(text: str) -> str:
     return " ".join(tokens) or (text or "").strip()
 
 
-def _running_headers(doc: GlasanaDocument) -> dict[int, str]:
+def header_tokens(text: str | None) -> set[str]:
+    """The content words of a running header, for loose comparison.
+
+    Short tokens are dropped: what survives `clean_header` still carries stray
+    two-letter fragments of the mirrored text, and those collide by accident.
+    """
+    return {t for t in _WORD.findall((text or "").casefold()) if len(t) > 2}
+
+
+def header_similarity(a: str | None, b: str | None) -> float:
+    """Token overlap between two running headers, 0.0 when either is unusable.
+
+    Token-set rather than string similarity: the real section name survives the
+    mirrored noise as a token, while the noise itself does not repeat, so
+    "IAHHCIO ODMEVI" and "ODMEVI" score 1.0 where equality scores nothing.
+
+    Callers that need to tell "different sections" from "no header to compare"
+    must check `header_tokens` themselves — both cases return 0.0 here.
+    """
+    left, right = header_tokens(a), header_tokens(b)
+    if not left or not right:
+        return 0.0
+    return len(left & right) / min(len(left), len(right))
+
+
+def _squash(text: str | None) -> str:
+    """A header reduced to bare letters, for comparison as a character run."""
+    decomposed = unicodedata.normalize("NFKD", (text or "").casefold())
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]", "", stripped)
+
+
+def header_char_similarity(a: str | None, b: str | None) -> float:
+    """Similarity of two headers as character runs, ignoring word boundaries.
+
+    The token comparison fails when OCR mangles the words themselves rather
+    than adding noise around them: "(PRED)USM ERJENE STRANI" comes back as
+    "CPRED)USMEHJENE STRAHI", which shares no whole word with it but is plainly
+    the same header. Character overlap sees that where tokens cannot.
+    """
+    left, right = _squash(a), _squash(b)
+    if not left or not right:
+        return 0.0
+    return difflib.SequenceMatcher(None, left, right).ratio()
+
+
+def same_section(
+    a: str | None,
+    b: str | None,
+    min_token_similarity: float,
+    min_char_similarity: float,
+) -> bool:
+    """Whether two running headers name the same section of the magazine.
+
+    Either measure alone is enough. Tokens catch a header printed with the
+    facing page's mirrored through it ("IAHHCIO ODMEVI" against "ODMEVI",
+    which share no characters in order); characters catch one whose words came
+    back misread. A header too damaged for both is treated as a change only by
+    callers that first check there was a header to read at all.
+    """
+    if header_similarity(a, b) >= min_token_similarity:
+        return True
+    return header_char_similarity(a, b) >= min_char_similarity
+
+
+def is_running_header(text: str | None, max_words: int) -> bool:
+    """Whether `text` is short enough to be a running header rather than prose.
+
+    Captions and standfirsts get labelled Header often enough to matter, and
+    one of them standing in for a section name invents a section change on
+    every page it appears.
+    """
+    words = _WORD.findall(text or "")
+    return bool(words) and len(words) <= max_words
+
+
+def running_headers(
+    doc: GlasanaDocument, max_words: int = DEFAULT_HEADER_MAX_WORDS
+) -> dict[int, str]:
     """The section header printed on each page, if any."""
     headers: dict[int, list[str]] = defaultdict(list)
     for item in doc.items.values():
         if isinstance(item, (HeaderItem, SectionItem)):
             text = clean_header(item.text or "")
-            if text:
+            if text and is_running_header(text, max_words):
                 headers[item.provenance.page_no].append(text)
     # Longest wins: what survives cleaning is usually the real section name.
     return {
@@ -108,7 +193,10 @@ def rebuild(
     membership, so earlier passes can move an item simply by repointing it.
     """
     position = {iid: i for i, iid in enumerate(doc.body_order)}
-    headers = _running_headers(doc)
+    headers = running_headers(
+        doc,
+        config.section_header_max_words if config else DEFAULT_HEADER_MAX_WORDS,
+    )
 
     members: dict[str, list[str]] = defaultdict(list)
     for item in doc.items.values():

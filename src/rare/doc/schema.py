@@ -392,6 +392,10 @@ class Article(BaseModel):
     section: Optional[str] = None        # running header, e.g. "ODMEVI"
     entity_keys: List[str] = Field(default_factory=list)
     continued: bool = False
+    # Set on a piece cut out of a column by `rare.link.split`: the article_id
+    # of the column it came from. Pieces of one column are separate by
+    # construction, so `rare.link.crosspage` will not merge them back together.
+    split_from: Optional[str] = None
     # Editorial genre from a ClassificationBackend, e.g. "intervju", "novica".
     # None when no classifier ran or it produced nothing usable.
     genre: Optional[str] = None
@@ -409,6 +413,7 @@ class Link(BaseModel):
         "caption-of",           # caption/figbyline -> figure    (item -> item)
         "caption-to-article",   # orphaned caption  -> article   (item -> article)
         "article-continues",    # article absorbed a continuation (article -> article)
+        "article-split",        # column -> piece cut out of it  (article -> article)
         "entity-overlap",       # items sharing a rare named entity (item -> item)
     ]
     from_id: str
