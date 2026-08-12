@@ -688,13 +688,11 @@ Top priority:
   - [x] GPT 5.5
   - [x] Gemini Pro 3.1
   - [x] Anthropic Claude Opus 4.8
-- [ ] Evaluate all models: 
+- [x] Evaluate all models: 
   - [x] Pipeline
   - [x] Specialized VLM
-  - [x] General VLM (currently limited to a single PDF)
-
-Lower priority:
-- [ ] Add support for Paragraph2Graph, M2Doc
+  - [x] General VLM
+    - [ ] Qwen3-VL
 
 # Limitations and Further Work
 
