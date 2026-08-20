@@ -164,7 +164,7 @@ def draw_layout(
 
     viz = lp.draw_box(
         img,
-        [b.set(id=f"{b.score:.2f}/{b.type}/{b.id}" if b.score else f"{b.type}") for b in layout],
+        [b.set(id=f"{b.score:.2f}/{b.type}/{b.id}" if b.score else f"{b.type}/{b.id}") for b in layout],
         box_width=2,
         color_map=color_map,
         show_element_id=True,

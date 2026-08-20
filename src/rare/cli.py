@@ -83,6 +83,29 @@ def _make_classifier(args: argparse.Namespace):
         return None
 
 
+def _make_ocr(args: argparse.Namespace):
+    """Instantiate the OCR fallback for empty regions, or None.
+
+    Not best-effort, unlike `_make_ner`: --ocr was asked for explicitly, and a
+    missing language pack would otherwise fall through to English and fill the
+    document with plausible-looking text whose diacritics are wrong.
+    """
+    if not getattr(args, "ocr", None):
+        return None
+
+    from rare.parse.ocr import TesseractOCR
+
+    return TesseractOCR(
+        lang=args.ocr_lang,
+        dpi=args.ocr_dpi,
+        min_confidence=args.ocr_min_confidence,
+    )
+
+
+def _ocr_labels(args: argparse.Namespace) -> list[str]:
+    return [label.strip() for label in args.ocr_labels.split(",") if label.strip()]
+
+
 def _link(doc, args: argparse.Namespace):
     """Run the whole-document linking passes unless --no-link was given."""
     from rare.link import link_document
@@ -146,6 +169,8 @@ def cmd_parse(args: argparse.Namespace) -> int:
             emit_omnidocbench=args.emit_omnidocbench,
             category_map=category_map,
             linker=None if args.no_link else (lambda doc: _link(doc, args)),
+            ocr=_make_ocr(args),
+            ocr_labels=_ocr_labels(args),
         )
         for out in out_dirs:
             print(f"Output written to: {out}")
@@ -205,6 +230,8 @@ def cmd_parse(args: argparse.Namespace) -> int:
         save_coco=args.emit_coco,
         emit_omnidocbench=args.emit_omnidocbench,
         linker=(lambda doc: _link(doc, args)),
+        ocr=_make_ocr(args),
+        ocr_labels=_ocr_labels(args),
     )
     print(f"Output written to: {out}")
     if args.emit_coco:
@@ -220,9 +247,89 @@ def cmd_tools(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_annotations(args: argparse.Namespace) -> Path | None:
+    """The COCO file the document-level tracks score against, or None."""
+    root = Path(args.data_root or f"datasets/{args.dataset}")
+    if getattr(args, "annotations", None):
+        path = Path(args.annotations)
+        return path if path.exists() else None
+    for candidate in ("annotations_with_order.json", "annotations.json"):
+        if (root / candidate).exists():
+            return root / candidate
+    return None
+
+
+def _evaluate_page_genre(args: argparse.Namespace) -> int:
+    """`--track page-genre`: annotated page type vs predicted genre (see rare.evaluate.page_genre)."""
+    from rare.evaluate.page_genre import run_page_genre
+
+    root = Path(args.data_root or f"datasets/{args.dataset}")
+    coco_path = _resolve_annotations(args)
+    if coco_path is None:
+        print(f"error: no COCO annotations found under {root}.", file=sys.stderr)
+        return 2
+
+    pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else root / "pdfs"
+    run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(args.output) / run_id
+
+    summary = run_page_genre(
+        coco_path,
+        run_dir,
+        docs_dir=args.docs_dir,
+        pdfs_dir=pdfs_dir if pdfs_dir.exists() else None,
+        linker=(lambda doc: _link(doc, args)) if not args.docs_dir else None,
+        page_type_map=args.page_type_map,
+        limit=args.limit,
+        dataset_name=args.dataset,
+    )
+    print(f"\nAggregates: {json.dumps(summary['overall'], indent=2)}")
+    print(f"Scored page types: {', '.join(summary['scored_page_types'])}")
+    print(f"Ignored page types: {', '.join(summary['ignored_page_types'])}")
+    print(f"Report: {run_dir / 'report.md'}")
+    return 0
+
+
+def _evaluate_figure_link(args: argparse.Namespace) -> int:
+    """`--track figure-link`: figure/caption → article attachment (see rare.evaluate.figure_link)."""
+    from rare.evaluate.figure_link import run_figure_link
+
+    root = Path(args.data_root or f"datasets/{args.dataset}")
+    coco_path = _resolve_annotations(args)
+    if coco_path is None:
+        print(f"error: no COCO annotations found under {root}.", file=sys.stderr)
+        return 2
+
+    pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else root / "pdfs"
+    run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(args.output) / run_id
+
+    summary = run_figure_link(
+        coco_path,
+        run_dir,
+        docs_dir=args.docs_dir,
+        pdfs_dir=pdfs_dir if pdfs_dir.exists() else None,
+        linker=(lambda doc: _link(doc, args)) if not args.docs_dir else None,
+        limit=args.limit,
+        iou_threshold=args.iou,
+        cross_page_anchor=args.cross_page_anchor,
+        dataset_name=args.dataset,
+    )
+    print(f"\nAggregates: {json.dumps(summary['overall'], indent=2)}")
+    print(f"Report: {run_dir / 'report.md'}")
+    return 0
+
+
 def cmd_evaluate(args: argparse.Namespace) -> int:
     if args.list_models:
         return cmd_parse(args)  # reuse the same listing
+
+    # The document-level tracks read the COCO annotations directly — they need
+    # no gold layouts, so they skip the loader (and layoutparser with it).
+    if args.track == "figure-link":
+        return _evaluate_figure_link(args)
+    if args.track == "page-genre":
+        return _evaluate_page_genre(args)
 
     # Must run before dataset loading: gold-layout construction imports
     # layoutparser, which freezes LAYOUTPARSER_BACKEND for the process.
@@ -376,6 +483,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON config for the classification backend.",
     )
     p_parse.add_argument(
+        "--no-link",
+        dest="no_link",
+        action="store_true",
+        help="Skip the whole-document linking passes (captions, articles, "
+             "continuations, entity edges); items keep the per-page assembly only.",
+    )
+    p_parse.add_argument(
         "--emit-omnidocbench",
         dest="emit_omnidocbench",
         action="store_true",
@@ -414,6 +528,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_parse.add_argument("--dpi", type=int, default=200, help="Render DPI (default: 200).")
     p_parse.add_argument(
+        "--ocr",
+        choices=["tesseract"],
+        help="Re-read regions the PDF's text layer left empty by OCR'ing the "
+             "rendered page (see rare.parse.ocr). Off by default.",
+    )
+    p_parse.add_argument(
+        "--ocr-labels",
+        default="Header",
+        help="Comma-separated labels the OCR fallback may fill (default: Header).",
+    )
+    p_parse.add_argument(
+        "--ocr-lang",
+        default="slv",
+        help="Tesseract language for --ocr (default: slv). Fails if not installed.",
+    )
+    p_parse.add_argument(
+        "--ocr-dpi",
+        type=int,
+        default=400,
+        help="DPI the OCR crops are rendered at (default: 400, above --dpi on "
+             "purpose: 200 is marginal for Tesseract on these scans).",
+    )
+    p_parse.add_argument(
+        "--ocr-min-confidence",
+        type=float,
+        default=40.0,
+        help="Discard OCR readings below this mean word confidence (default: 40).",
+    )
+    p_parse.add_argument(
         "--list-models",
         action="store_true",
         help="List available backends and exit.",
@@ -427,7 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument(
         "--track",
         required=True,
-        choices=["pipeline", "vlm"],
+        choices=["pipeline", "vlm", "figure-link", "page-genre"],
         help="Which track to evaluate.",
     )
     p_eval.add_argument(
@@ -516,6 +659,56 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-models",
         action="store_true",
         help="List backends and exit (same as `rare parse --list-models`).",
+    )
+
+    # --- figure-link / page-genre tracks -----------------------------------
+    p_eval.add_argument(
+        "--annotations",
+        help="figure-link/page-genre tracks: COCO annotations (figure-link needs "
+             "`order_id`, page-genre needs `page_type`). Default: "
+             "<data_root>/annotations_with_order.json, else annotations.json.",
+    )
+    p_eval.add_argument(
+        "--docs-dir",
+        help="figure-link/page-genre tracks: score the `*_doc.json` files under this "
+             "directory (end to end). Omit to build documents from the ground-truth "
+             "layout and reading order instead, which scores the linking passes alone.",
+    )
+    p_eval.add_argument(
+        "--page-type-map",
+        help="page-genre track: JSON file of {page_type: genre | [genres] | null} "
+             "merged over the built-in map; null leaves that page type out of the "
+             "score (see rare.evaluate.page_genre.PAGE_TYPE_TO_GENRE).",
+    )
+    p_eval.add_argument(
+        "--iou",
+        type=float,
+        default=0.5,
+        help="figure-link track: IoU threshold for matching items to annotations "
+             "(default: 0.5).",
+    )
+    p_eval.add_argument(
+        "--no-cross-page-anchor",
+        dest="cross_page_anchor",
+        action="store_false",
+        default=True,
+        help="figure-link track: do not anchor a page-opening visual to the last "
+             "block of the previous page; report it as unanchored instead.",
+    )
+    p_eval.add_argument(
+        "--ner",
+        help="figure-link/page-genre tracks: NER backend for the linking passes "
+             "(default: none).",
+    )
+    p_eval.add_argument(
+        "--classification",
+        help="figure-link/page-genre tracks: article-genre backend for the linking "
+             "passes (default: none, which leaves page-genre with the genres "
+             "rare.link.classify reads off the running headers).",
+    )
+    p_eval.add_argument(
+        "--link-config",
+        help="JSON config file for the linking passes (see `parse --link-config`).",
     )
     p_eval.set_defaults(func=cmd_evaluate)
 

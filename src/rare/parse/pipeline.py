@@ -18,6 +18,7 @@ from rare.doc.schema import (
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
 from rare.parse.merge import merge_flowing_paragraphs
+from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_empty_regions
 from rare.parse.pdf import render_pages
 from rare.parse.text import extract_text_for_page
 from rare.utils.conversionutils import layout_parser_to_coco
@@ -48,6 +49,8 @@ def parse_pdf(
     save_coco: bool = False,
     emit_omnidocbench: bool = False,
     linker=None,
+    ocr=None,
+    ocr_labels=None,
 ) -> Path:
     """Run layout detection, reading-order, text extraction, and assembly on a PDF.
 
@@ -78,6 +81,12 @@ def parse_pdf(
     written — see `rare.link.link_document`. It runs here rather than inside
     `write_outputs` so the throw-away single-page documents built for the
     OmniDocBench export are left untouched.
+
+    `ocr`, when given, re-reads regions whose text the PDF's text layer does not
+    carry — see `rare.parse.ocr`. `ocr_labels` restricts which labels are
+    eligible (default: Header only). It runs before the OmniDocBench export and
+    before the paragraph merge, so every downstream consumer sees one set of
+    texts regardless of where each one came from.
     """
     pdf_path = Path(pdf_path)
     pdf_stem = pdf_path.stem
@@ -136,6 +145,17 @@ def parse_pdf(
                 })
 
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
+
+            if ocr is not None:
+                fill_empty_regions(
+                    regions, texts,
+                    recognizer=ocr,
+                    pdf_path=pdf_path,
+                    page_no=page_no,
+                    labels=ocr_labels or DEFAULT_OCR_LABELS,
+                    page_image=page_image,
+                    page_image_dpi=dpi,
+                )
 
             # OmniDocBench scores the detector's own segmentation, so this
             # export is taken before the paragraph merge below.

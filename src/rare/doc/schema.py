@@ -145,6 +145,12 @@ class Provenance(BaseModel):
     bbox: dict                          # BBox.to_dict() result
     detection_score: Optional[float] = None
     source_region_id: Optional[str] = None
+    # Where the item's text came from: "pdf" for the PDF's own text layer,
+    # "ocr:<backend>" when `rare.parse.ocr` re-read the pixels because the text
+    # layer had nothing there. Defaulted, so documents written before the OCR
+    # fallback existed still load.
+    text_source: str = "pdf"
+    ocr_confidence: Optional[float] = None
 
     @classmethod
     def from_bbox(
@@ -153,12 +159,16 @@ class Provenance(BaseModel):
         bbox: BBox,
         detection_score: Optional[float] = None,
         source_region_id: Optional[str] = None,
+        text_source: str = "pdf",
+        ocr_confidence: Optional[float] = None,
     ) -> Provenance:
         return cls(
             page_no=page_no,
             bbox=bbox.to_dict(),
             detection_score=detection_score,
             source_region_id=source_region_id,
+            text_source=text_source,
+            ocr_confidence=ocr_confidence,
         )
 
     def get_bbox(self) -> BBox:

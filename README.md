@@ -59,6 +59,9 @@ rare parse <pdf> --layout doclayout-yolo --emit-omnidocbench
 # Choose the NER backend used by the linking stage
 rare parse <pdf> --layout doclayout-yolo --ner rudar-slv
 
+# Re-read regions the PDF's text layer left empty (running headers, by default)
+rare parse <pdf> --layout doclayout-yolo --ocr tesseract
+
 # Discover backends
 rare parse --list-models
 ```
@@ -73,6 +76,30 @@ articles made complete and ordered, and pieces continuing across a page break me
 is also recorded in `doc.links` with the method, score and evidence behind it.
 
 `--ner rudar-slv` needs the NER extra (`pip install -e ".[ner]"`).
+
+#### OCR fallback for empty regions (`--ocr`)
+
+The corpus PDFs are scans: one full-page image per page with an invisible OCR text layer over it. Where that upstream
+OCR gave up, per-region extraction yields nothing — there are no glyphs under the box to extract. Running headers are
+the frequent casualty.
+
+`--ocr tesseract` re-reads those regions from the pixels, cropping them out of the page re-rendered at
+`--ocr-dpi` (400 by default — 200 is marginal for Tesseract on these scans). It runs **only** on regions that came back
+empty, so text the PDF actually carries is never second-guessed, and only on the labels named by `--ocr-labels`
+(default: `Header`). Figures are never OCR'd whatever the label set says. Readings below `--ocr-min-confidence` are
+discarded — an empty header is a smaller problem than a header full of noise.
+
+Filled regions carry `provenance.text_source: "ocr:tesseract"` and `provenance.ocr_confidence` in the output JSON, so
+OCR'd text stays distinguishable from text the PDF carried. Everything else keeps `"pdf"`.
+
+Needs the binary and the Slovenian language data, which is a separate package:
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-slv
+```
+
+Parsing fails immediately if the requested `--ocr-lang` is not installed, rather than falling back to English and
+filling the document with plausible-looking text whose diacritics are wrong.
 
 On the pipeline track, `--emit-omnidocbench` additionally writes one Markdown file per page to `outputs/parsed/<pdf_stem>/omnidocbench/<stem>_<page>.md` — the flat `<image_stem>.md` layout OmniDocBench's end-to-end evaluator mounts at `data_md/predictions`. These pages are rendered from the regions **as the DLA model detected them**, before the heuristic pass that re-joins paragraphs split across columns or pages, so the score reflects the model's own segmentation. The regular `<stem>.md` (and `--per-page` output under `pages/`) stay merged.
 
@@ -93,6 +120,81 @@ rare evaluate --track vlm --dataset glasbena_mladina \
 Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumulate models; `report.md` regenerates from every per-model JSON in the run directory.
 
 Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_model/}`.
+
+#### Figure/caption → article attachment (`--track figure-link`)
+
+The annotations carry no article grouping, but their reading order places every Figure, Caption and FigByline
+immediately after the piece it illustrates. That gives a ground truth for the linking stage without annotating
+articles: **a visual belongs to the same article as the last body block before it in reading order** (its *anchor*,
+found by skipping the other visuals in its own run).
+
+```bash
+# Linking alone — documents are rebuilt from the ground-truth boxes and order,
+# so detection and reading order are perfect and only rare.link is measured.
+rare evaluate --track figure-link --dataset glasbena_mladina \
+    --pdfs-dir datasets/glasbena_mladina/pdfs/eval
+
+# End to end — score the *_doc.json of a real parse; items are matched back to
+# the annotations by IoU, so misdetections and reading-order errors count too.
+rare evaluate --track figure-link --dataset glasbena_mladina \
+    --docs-dir outputs/parsed
+```
+
+| Metric | Meaning |
+|---|---|
+| `attachment_accuracy` | visual and its anchor in the same predicted article, over the visuals where both were found |
+| `attachment_recall`   | same, over every visual the annotation places — an undetected figure counts against it |
+| `separation`          | visual/block pairs on opposite sides of a Headline that ended up in **different** articles |
+| `attachment_score`    | harmonic mean of accuracy and separation |
+| `caption_figure_accuracy` | a Caption/FigByline that follows a Figure carries that figure's `figure_id` |
+
+Accuracy and separation are reported together because each is trivial to win alone: one article for the whole
+magazine scores 1.0 on accuracy and 0.0 on separation, one article per block does the opposite.
+
+Results land in `outputs/evaluations/<run_id>/`: `attachment_summary.json` (overall plus per label, per page type
+and per document), `attachment_cases.jsonl` (one row per annotated visual — status, anchor, predicted article title)
+and the usual `report.md` / `scores.csv`.
+
+#### Page type vs article genre (`--track page-genre`)
+
+A first, deliberately blunt check on the classification pass: does the annotated `page_type` of a page agree with the
+`genre` of the articles predicted on it? The two vocabularies describe different things, so the comparison runs
+through one editable table, `PAGE_TYPE_TO_GENRE` in `rare/evaluate/page_genre.py`:
+
+| Page type | Expected genre | | Page type | Expected genre |
+|---|---|---|---|---|
+| `ArticlePage`   | `članek`    | | `ImagesPage` | `slike`      |
+| `NewsPage`      | `novice`    | | `TOCPage`    | `kazalo`     |
+| `InterviewPage` | `intervju`  | | `AdvertPage` | `reklama`    |
+| `RecordsPage`   | `recenzija` | | `CoverPage`  | `naslovnica` |
+| `LettersPage`   | `pisma`     | | `SpecialPage`| *not scored* |
+| `QuizPage`      | `kviz`      | | `BackPage`   | *not scored* |
+| `EventsPage`    | `dogodki`   | | *(no `page_type`)* | *not scored* |
+
+`SpecialPage` and `BackPage` say how a page is laid out and where it sits in the issue, not what the piece on it is,
+so they are mapped to `null` and left out of the totals rather than counted as failures. Change any of that from a
+JSON file of `{page_type: genre | [genres] | null}` — a list accepts several genres, `null` retires a page type:
+
+```bash
+# Score a real parse; genres come from whatever --classification produced.
+rare evaluate --track page-genre --dataset glasbena_mladina \
+    --docs-dir outputs/parsed [--page-type-map my_map.json]
+
+# Ground-truth layout instead. With no --classification, genres still come from
+# the running-header fallback in rare.link.classify — the cheap way to try a
+# change to the table.
+rare evaluate --track page-genre --dataset glasbena_mladina \
+    --pdfs-dir datasets/glasbena_mladina/pdfs/eval
+```
+
+A page can hold pieces of several genres, so the result is reported from three angles: `accuracy_dominant` (the
+article holding most of the page has the expected genre), `accuracy_any` (some article on the page does) and
+`article_accuracy` over every (page, article) pair — the truth for a mixed page is between the first two.
+`genre_coverage` is the share of scored pages carrying any genre at all; a low headline accuracy usually means
+articles went unclassified, not that they were misclassified.
+
+`page_genre_summary.json` also holds the **confusion matrix** of page type against the genre actually predicted,
+which is what to read when deciding how the table should change; `page_genre_pages.jsonl` has one row per scored page.
 
 #### OmniDocBench Layout detection metrics (`--run-omnidocbench`)
 
@@ -255,7 +357,7 @@ rare/                         # installable package — entry point: rare = "rar
 │   ├── order/                # order detection model/method classes
 │   └── vlm/                  # visual language model document parsing classes
 ├── parse/                    # PDF → pages → layout → order → text → GlasanaDocument
-├── evaluate/                 # dataset loaders + pipeline/VLM metrics + runner + report
+├── evaluate/                 # dataset loaders + pipeline/VLM/figure-link metrics + runner + report
 ├── tools/_helper.py          # annotation utilities
 └── utils/                    # eval / display / file / conversion / character helpers
 configs/                      # JSON configs per model
