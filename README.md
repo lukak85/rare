@@ -213,13 +213,13 @@ rare evaluate --track figure-link --dataset glasbena_mladina \
     --docs-dir outputs/parsed
 ```
 
-| Metric | Meaning |
-|---|---|
-| `attachment_accuracy` | visual and its anchor in the same predicted article, over the visuals where both were found |
-| `attachment_recall`   | same, over every visual the annotation places — an undetected figure counts against it |
-| `separation`          | visual/block pairs on opposite sides of a Headline that ended up in **different** articles |
-| `attachment_score`    | harmonic mean of accuracy and separation |
-| `caption_figure_accuracy` | a Caption/FigByline that follows a Figure carries that figure's `figure_id` |
+| Metric                    | Meaning                                                                                     |
+|---------------------------|---------------------------------------------------------------------------------------------|
+| `attachment_accuracy`     | visual and its anchor in the same predicted article, over the visuals where both were found |
+| `attachment_recall`       | same, over every visual the annotation places — an undetected figure counts against it      |
+| `separation`              | visual/block pairs on opposite sides of a Headline that ended up in **different** articles  |
+| `attachment_score`        | harmonic mean of accuracy and separation                                                    |
+| `caption_figure_accuracy` | a Caption/FigByline that follows a Figure carries that figure's `figure_id`                 |
 
 Accuracy and separation are reported together because each is trivial to win alone: one article for the whole
 magazine scores 1.0 on accuracy and 0.0 on separation, one article per block does the opposite.
@@ -234,15 +234,22 @@ A first, deliberately blunt check on the classification pass: does the annotated
 `genre` of the articles predicted on it? The two vocabularies describe different things, so the comparison runs
 through one editable table, `PAGE_TYPE_TO_GENRE` in `rare/evaluate/page_genre.py`:
 
-| Page type | Expected genre | | Page type | Expected genre |
-|---|---|---|---|---|
-| `ArticlePage`   | `članek`    | | `ImagesPage` | `slike`      |
-| `NewsPage`      | `novice`    | | `TOCPage`    | `kazalo`     |
-| `InterviewPage` | `intervju`  | | `AdvertPage` | `reklama`    |
-| `RecordsPage`   | `recenzija` | | `CoverPage`  | `naslovnica` |
-| `LettersPage`   | `pisma`     | | `SpecialPage`| *not scored* |
-| `QuizPage`      | `kviz`      | | `BackPage`   | *not scored* |
-| `EventsPage`    | `dogodki`   | | *(no `page_type`)* | *not scored* |
+| Page type          | Expected genre              |
+|--------------------|-----------------------------|
+| `ArticlePage`      | `članek`                    |
+| `NewsPage`         | `novice`                    |
+| `InterviewPage`    | `intervju`                  |
+| `RecordsPage`      | `recenzija`                 |
+| `LettersPage`      | `pisma`                     |
+| `QuizPage`         | `kviz`                      |
+| `EventsPage`       | `dogodki`                   |
+| `ImagesPage`       | `slike`                     |
+| `TOCPage`          | `kazalo`                    |
+| `AdvertPage`       | `reklama`                   |
+| `CoverPage`        | `naslovnica`                |
+| `SpecialPage`      | *not scored* (manual check) |
+| `FrontPage`        | *not scored*                |
+| `BackPage`         | *not scored*                |
 
 `SpecialPage` and `BackPage` say how a page is laid out and where it sits in the issue, not what the piece on it is,
 so they are mapped to `null` and left out of the totals rather than counted as failures. Change any of that from a
@@ -798,18 +805,18 @@ control and checking of calculations):
 
 ### Specialized VLMs:
 
-| Model               | Type                    | Text block NED    | Reading order NED |
-|---------------------|-------------------------|-------------------|-------------------|
-| DeepSeekOCR-2       | -                       | 0.188             | 0.115             |
-| Docling             | Default                 | 0.0664            | 0.164             |
-| dots.ocr            | dots.mocr               | <ins>0.0420</ins> | **0.0765**        |
-| Dolphin             | Dolphinv2               | 0.0542            | 0.0896            |
-| GLM-OCR             | GLM-4V                  | 0.1379*           | 0.1941*           |
-| Marker              | Default                 | 0.0461            | 0.1033            |
-| MinerU              | MinerU2.5-Pro-2604-1.2B | 0.181             | 0.137             |
-| Nemotron-Parse-v1.2 | -                       | 0.0686            | 0.0914            |
-| PaddleOCR           | PaddleOCR-VL-1.6        | 0.115             | 0.170             |
-| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0383**        | <ins>0.0874</ins> |
+| Model               | Type                    | Text block NED   | Reading order NED |
+|---------------------|-------------------------|------------------|-------------------|
+| DeepSeekOCR-2       | -                       | 0.188            | 0.115             |
+| Docling             | Default                 | 0.0664           | 0.164             |
+| dots.ocr            | dots.mocr               | <ins>0.348</ins> | **0.0765**        |
+| Dolphin             | Dolphinv2               | 0.0542           | 0.0896            |
+| GLM-OCR             | GLM-4V                  | 0.1379*          | 0.1941*           |
+| Marker              | Default                 | 0.0416           | 0.1033            |
+| MinerU              | MinerU2.5-Pro-2604-1.2B | 0.181            | 0.137             |
+| Nemotron-Parse-v1.2 | -                       | 0.0686           | 0.0914            |
+| PaddleOCR           | PaddleOCR-VL-1.6        | 0.115            | 0.170             |
+| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0306**       | <ins>0.0874</ins> |
 
 \* Only results successfully parsed were scored against ground truth.
 
@@ -820,31 +827,48 @@ control and checking of calculations):
 | ChatGPT  | GPT 5.5              | <ins>0.05688</ins> | <ins>0.0706</ins>  | \$0.1444 / 0,13€<br/>-\$0.0203 for 4050 tokens at \$5/MTok IN<br/>-\$0.1247 for 4157 at \$30.00/MTok OUT        |
 | Claude   | Opus 4.8             | **0.0504**         | 0.0800             | \$0.0935 / 0,082€<br/>-\$0.0279 for 5584 tokens at \$5/MTok IN<br/>-\$0.0656 for 2624 tokens at \$25/MTok OUT   |
 | Gemini   | Gemini 3.1 Pro       | 0.0718             | **0.0664**         | \$0.0988 / 0,086€<br/>-\$0.0025 for 1277 tokens at ~\$2/MTok IN<br/>-\$0.0961 for 8007 tokens at ~\$12/MTok OUT |
-| Qwen3-VL | Qwen3-VL-8B-Instruct | TODO               | TODO               | -                                                                                                               |
 
 \* Currently only evaluated on a single PDF.
 
-\** As of 15.7.2026, unoptimised (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
+\** As of 15.7.2026, unoptimized (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
 
 **Note**: NED - Normalized edit distance
 
 #### Page wise breakdown of NED scores for best VLMs
 
-Comparisson of the best performing VLMs compared to our implementation
+Comparison of the best performing VLMs compared to our implementation, given with normalized edit distance by page type.
 
-| Model         | Type                          | Text block NED    | Reading order NED |
-|---------------|-------------------------------|-------------------|-------------------|
-| dots.ocr      | dots.mocr                     | <ins>0.0420</ins> | **0.0765**        |
-| Marker        | Default                       | 0.0461            | 0.1033            |
-| Youtu-Parsing | Youtu-LLM-2B-Base             | **0.0383**        | <ins>0.0874</ins> |
-| Ours*         | DocLayout-YOLO + LayoutReader | 0.0694            | 0.1899            |
+| Page type          | Youtu-Parsing: Text | Youtu-Parsing: Order | Marker: Text | Marker: Order | dots.ocr: Text | dots.ocr: Order |
+|--------------------|---------------------|----------------------|--------------|---------------|----------------|-----------------|
+| Advert             | 0.048               | 0.104                | 0.113        | 0.174         | 0.038          | 0.059           |
+| Article            | 0.023               | 0.069                | 0.024        | 0.090         | 0.025          | 0.061           |
+| Cover              | 0.009               | 0.125                | 0.052        | 0.125         | 0.026          | 0.000           |
+| Events             | 0.055               | 0.248                | 0.136        | 0.266         | 0.037          | 0.229           |
+| Images             | 0.172               | 0.092                | 0.401        | 0.192         | 0.185          | 0.083           |
+| Interview          | 0.022               | 0.078                | 0.032        | 0.101         | 0.023          | 0.074           |
+| Letters            | 0.020               | 0.050                | 0.015        | 0.075         | 0.034          | 0.065           |
+| News               | 0.020               | 0.093                | 0.021        | 0.103         | 0.022          | 0.064           |
+| Quiz               | 0.058               | 0.068                | 0.080        | 0.102         | 0.089          | 0.070           |
+| Records            | 0.017               | 0.110                | 0.015        | 0.084         | 0.032          | 0.071           |
+| Special            | 0.175               | 0.186                | 0.222        | 0.297         | 0.145          | 0.201           |
+| TOC                | 0.058               | 0.145                | 0.061        | 0.151         | 0.049          | 0.146           |
+| **All (page avg)** | **0.031**           | **0.084**            | **0.042**    | **0.103**     | **0.035**      | **0.072**       |
+| All (whole)        | 0.025               | 0.081                | 0.028        | 0.099         | 0.029          | 0.068           |
+| All (sample avg)   | 0.039               | 0.084                | 0.055        | 0.103         | 0.043          | 0.072           |
 
 \* Due to ground truth being obtained using bounding boxes but same OCR-ed letters, the text block NED is not directly
 comparable to the other VLMs, but is included for reference.
 
-<ins>**Page wise breakdown**</ins>:
+### Figure linking results
 
-TODO
+
+
+### Classification results
+
+| Model             | Matching |
+|-------------------|----------|
+| Gams-12B-Instruct | 0.5968   |
+
 
 # Demo
 
