@@ -36,7 +36,7 @@ from rare.link import (
     classify,
     crosspage,
     entities,
-    figures,
+    figure_matching,
     split,
 )
 from rare.link.config import LinkConfig
@@ -62,7 +62,7 @@ def link_document(
 
     entities.annotate(doc, ner)
 
-    linked_captions = figures.link_captions(doc, cfg)
+    linked_captions = figure_matching.link_captions(doc, cfg)
 
     index = entities.EntityIndex(doc, cfg)
     articles.rebuild(doc, index, cfg)
