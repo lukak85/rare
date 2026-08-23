@@ -24,16 +24,14 @@ class GamsClassification:
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
         )
 
         self.model = pipeline(
             "text-generation",
             model=model_id,
-            # device_map="auto",
             model_kwargs={"quantization_config": quant_config},
             device_map={"": 0},  # force everything onto GPU 0; errors loudly instead of offloading
-            torch_dtype=torch.bfloat16,
-
         )
 
         self.classes = list(cfg.get("classes") or [
