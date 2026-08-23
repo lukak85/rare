@@ -25,7 +25,7 @@ from tqdm import tqdm
 from rare.doc.schema import Article, GlasanaDocument, PageInfo
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
-from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_empty_regions
+from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_failed_regions
 from rare.parse.pdf import render_page
 from rare.parse.text import extract_text_for_page
 
@@ -118,6 +118,7 @@ def parse_coco(
     linker=None,
     ocr=None,
     ocr_labels=None,
+    ocr_retry=None,
 ) -> list[Path]:
     """Render every document described by a COCO file to HTML / MD / JSON.
 
@@ -140,8 +141,10 @@ def parse_coco(
 
     `ocr`, when given, re-reads regions the source PDF's text layer left empty
     (see `rare.parse.ocr`); `ocr_labels` restricts which labels are eligible,
-    defaulting to Header only. Without a resolvable PDF there is no text layer
-    and hence no gap to fill, so the OCR pass is skipped along with extraction.
+    defaulting to Header only, and `ocr_retry` names the `rare.parse.quality`
+    reasons (`junk`, `sparse`, `alien`) that also earn a region a second
+    reading. Without a resolvable PDF there is no text layer and hence no gap
+    to fill, so the OCR pass is skipped along with extraction.
     """
     coco = COCO(str(coco_path))
     images_dir = Path(images_dir) if images_dir else None
@@ -199,12 +202,15 @@ def parse_coco(
                 if pdf is not None and page_no < len(pdf.pages):
                     texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
                     if ocr is not None:
-                        fill_empty_regions(
+                        fill_failed_regions(
                             regions, texts,
                             recognizer=ocr,
                             pdf_path=stem_pdf,
                             page_no=page_no,
+                            page_w=img_w,
+                            page_h=img_h,
                             labels=ocr_labels or DEFAULT_OCR_LABELS,
+                            retry=ocr_retry or (),
                             page_image=page_image,
                             page_image_dpi=dpi,
                         )

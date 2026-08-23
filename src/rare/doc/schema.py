@@ -151,6 +151,12 @@ class Provenance(BaseModel):
     # fallback existed still load.
     text_source: str = "pdf"
     ocr_confidence: Optional[float] = None
+    # Set only when OCR *replaced* text the PDF already carried (--ocr-retry):
+    # what was there before, and the `rare.parse.quality` reasons that
+    # condemned it. Keeping both is what makes the replacement reviewable
+    # afterwards rather than something to take on trust.
+    text_before_ocr: Optional[str] = None
+    text_flags: Optional[str] = None
 
     @classmethod
     def from_bbox(
@@ -161,6 +167,8 @@ class Provenance(BaseModel):
         source_region_id: Optional[str] = None,
         text_source: str = "pdf",
         ocr_confidence: Optional[float] = None,
+        text_before_ocr: Optional[str] = None,
+        text_flags: Optional[str] = None,
     ) -> Provenance:
         return cls(
             page_no=page_no,
@@ -169,6 +177,8 @@ class Provenance(BaseModel):
             source_region_id=source_region_id,
             text_source=text_source,
             ocr_confidence=ocr_confidence,
+            text_before_ocr=text_before_ocr,
+            text_flags=text_flags,
         )
 
     def get_bbox(self) -> BBox:

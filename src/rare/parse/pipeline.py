@@ -18,7 +18,7 @@ from rare.doc.schema import (
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
 from rare.parse.merge import merge_flowing_paragraphs
-from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_empty_regions
+from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_failed_regions
 from rare.parse.pdf import render_pages
 from rare.parse.text import extract_text_for_page
 from rare.utils.conversionutils import layout_parser_to_coco
@@ -51,6 +51,7 @@ def parse_pdf(
     linker=None,
     ocr=None,
     ocr_labels=None,
+    ocr_retry=None,
 ) -> Path:
     """Run layout detection, reading-order, text extraction, and assembly on a PDF.
 
@@ -84,9 +85,12 @@ def parse_pdf(
 
     `ocr`, when given, re-reads regions whose text the PDF's text layer does not
     carry — see `rare.parse.ocr`. `ocr_labels` restricts which labels are
-    eligible (default: Header only). It runs before the OmniDocBench export and
-    before the paragraph merge, so every downstream consumer sees one set of
-    texts regardless of where each one came from.
+    eligible (default: Header only), and `ocr_retry` names the
+    `rare.parse.quality` reasons (`junk`, `sparse`, `alien`) that also earn a
+    region a second reading, so text that is present but wrong is not skipped
+    for being non-empty. It runs before the OmniDocBench export and before the
+    paragraph merge, so every downstream consumer sees one set of texts
+    regardless of where each one came from.
     """
     pdf_path = Path(pdf_path)
     pdf_stem = pdf_path.stem
@@ -147,12 +151,15 @@ def parse_pdf(
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
 
             if ocr is not None:
-                fill_empty_regions(
+                fill_failed_regions(
                     regions, texts,
                     recognizer=ocr,
                     pdf_path=pdf_path,
                     page_no=page_no,
+                    page_w=img_w,
+                    page_h=img_h,
                     labels=ocr_labels or DEFAULT_OCR_LABELS,
+                    retry=ocr_retry or (),
                     page_image=page_image,
                     page_image_dpi=dpi,
                 )

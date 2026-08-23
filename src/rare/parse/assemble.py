@@ -81,9 +81,11 @@ def assemble_page(
             bbox=bbox,
             detection_score=region.get("score"),
             source_region_id=region["region_id"],
-            # Set by `rare.parse.ocr` when it re-read an empty region.
+            # Set by `rare.parse.ocr` when it re-read a region.
             text_source=region.get("text_source", "pdf"),
             ocr_confidence=region.get("ocr_confidence"),
+            text_before_ocr=region.get("text_before_ocr"),
+            text_flags=region.get("text_flags"),
         )
         text = texts.get(region["region_id"], "")
         item_cls = LABEL_TO_CLASS.get(label, ParagraphItem)

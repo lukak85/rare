@@ -83,27 +83,80 @@ def _make_classifier(args: argparse.Namespace):
         return None
 
 
+OCR_BACKENDS = ("tesseract", "ppocr")
+
+
 def _make_ocr(args: argparse.Namespace):
-    """Instantiate the OCR fallback for empty regions, or None.
+    """Instantiate the OCR fallback, or None.
 
     Not best-effort, unlike `_make_ner`: --ocr was asked for explicitly, and a
     missing language pack would otherwise fall through to English and fill the
     document with plausible-looking text whose diacritics are wrong.
+
+    Naming more than one backend wraps them in `BestOfOCR`, which reads every
+    region with each and keeps the better answer — see `rare.parse.ocr`.
     """
-    if not getattr(args, "ocr", None):
+    requested = [b.strip() for b in getattr(args, "ocr", "").split(",") if b.strip()]
+    if not requested:
         return None
 
-    from rare.parse.ocr import TesseractOCR
+    unknown = [b for b in requested if b not in OCR_BACKENDS]
+    if unknown:
+        raise SystemExit(
+            f"error: unknown --ocr backend(s): {', '.join(unknown)} "
+            f"(choose from {', '.join(OCR_BACKENDS)})"
+        )
 
-    return TesseractOCR(
-        lang=args.ocr_lang,
-        dpi=args.ocr_dpi,
-        min_confidence=args.ocr_min_confidence,
-    )
+    built = []
+    for backend in dict.fromkeys(requested):        # de-duplicated, order kept
+        if backend == "tesseract":
+            from rare.parse.ocr import TesseractOCR
+
+            built.append(TesseractOCR(
+                lang=args.ocr_lang,
+                dpi=args.ocr_dpi,
+                min_confidence=args.ocr_min_confidence,
+                min_replace_confidence=args.ocr_min_replace_confidence,
+            ))
+        else:
+            from rare.parse.ocr_ppocr import make_recognizer
+
+            built.append(make_recognizer(
+                rec_model=args.ocr_rec_model,
+                dpi=args.ocr_dpi,
+                min_confidence=args.ocr_min_confidence,
+                min_replace_confidence=args.ocr_min_replace_confidence,
+                solidify=args.ocr_fill_outlines,
+            ))
+
+    if len(built) == 1:
+        return built[0]
+
+    from rare.parse.ocr import BestOfOCR
+
+    return BestOfOCR(built)
 
 
 def _ocr_labels(args: argparse.Namespace) -> list[str]:
     return [label.strip() for label in args.ocr_labels.split(",") if label.strip()]
+
+
+def _ocr_retry(args: argparse.Namespace) -> list[str]:
+    """Quality reasons that earn a *non-empty* region a second reading.
+
+    Validated here rather than in `fill_failed_regions`: a misspelt reason is
+    silently no retry at all, and the run would look like the flag worked.
+    """
+    from rare.parse.quality import REASONS
+
+    reasons = [r.strip() for r in getattr(args, "ocr_retry", "").split(",") if r.strip()]
+    unknown = set(reasons) - set(REASONS)
+    if unknown:
+        raise SystemExit(
+            f"error: unknown --ocr-retry reason(s): {', '.join(sorted(unknown))} "
+            f"(choose from {', '.join(r for r in REASONS if r != 'empty')})"
+        )
+    return reasons
 
 
 def _link(doc, args: argparse.Namespace):
@@ -171,6 +224,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
             linker=None if args.no_link else (lambda doc: _link(doc, args)),
             ocr=_make_ocr(args),
             ocr_labels=_ocr_labels(args),
+            ocr_retry=_ocr_retry(args),
         )
         for out in out_dirs:
             print(f"Output written to: {out}")
@@ -232,6 +286,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
         linker=(lambda doc: _link(doc, args)),
         ocr=_make_ocr(args),
         ocr_labels=_ocr_labels(args),
+        ocr_retry=_ocr_retry(args),
     )
     print(f"Output written to: {out}")
     if args.emit_coco:
@@ -529,14 +584,57 @@ def build_parser() -> argparse.ArgumentParser:
     p_parse.add_argument("--dpi", type=int, default=200, help="Render DPI (default: 200).")
     p_parse.add_argument(
         "--ocr",
-        choices=["tesseract"],
+        default="",
+        metavar="BACKEND[,BACKEND]",
         help="Re-read regions the PDF's text layer left empty by OCR'ing the "
-             "rendered page (see rare.parse.ocr). Off by default.",
+             "rendered page (see rare.parse.ocr). One of tesseract, ppocr, or "
+             "both comma-separated — the two fail in opposite directions on "
+             "letterspaced display type, and naming both reads every region "
+             "with each and keeps the better answer. Off by default.",
     )
     p_parse.add_argument(
         "--ocr-labels",
         default="Header",
         help="Comma-separated labels the OCR fallback may fill (default: Header).",
+    )
+    p_parse.add_argument(
+        "--ocr-retry",
+        nargs="?",
+        const="junk,sparse,alien",
+        default="",
+        metavar="REASONS",
+        help="Also re-read regions whose text is present but looks broken, as "
+             "scored by rare.parse.quality: junk (tokens that are not words, "
+             "e.g. the headline 'W Z7'), sparse (far less text than a box that "
+             "shape holds), alien (characters outside the Slovene alphabet). "
+             "Bare --ocr-retry means all three. Off by default, in which case "
+             "only empty regions are filled. Replacing existing text needs "
+             "--ocr-min-replace-confidence and a reading that scores clean, so "
+             "one bad reading is never swapped for another.",
+    )
+    p_parse.add_argument(
+        "--ocr-min-replace-confidence",
+        type=float,
+        default=60.0,
+        help="Confidence an OCR reading needs before it may overwrite text the "
+             "PDF already carried (default: 60, above --ocr-min-confidence on "
+             "purpose).",
+    )
+    p_parse.add_argument(
+        "--ocr-rec-model",
+        default="latin_PP-OCRv5_mobile_rec",
+        help="Recognition model for --ocr ppocr (default: "
+             "latin_PP-OCRv5_mobile_rec, the Latin-script multilingual head). "
+             "The Chinese/English heads have no č/š/ž in their dictionary and "
+             "transliterate them away silently.",
+    )
+    p_parse.add_argument(
+        "--ocr-fill-outlines",
+        action="store_true",
+        help="For --ocr ppocr: solidify hollow letterforms before recognition. "
+             "Display headlines here are sometimes set in an outline face, "
+             "where only the contour is inked and every recogniser sees rings. "
+             "Off by default — it trades one error for another on filled type.",
     )
     p_parse.add_argument(
         "--ocr-lang",

@@ -77,20 +77,58 @@ is also recorded in `doc.links` with the method, score and evidence behind it.
 
 `--ner rudar-slv` needs the NER extra (`pip install -e ".[ner]"`).
 
-#### OCR fallback for empty regions (`--ocr`)
+#### OCR fallback for failed regions (`--ocr`)
 
 The corpus PDFs are scans: one full-page image per page with an invisible OCR text layer over it. Where that upstream
 OCR gave up, per-region extraction yields nothing — there are no glyphs under the box to extract. Running headers are
 the frequent casualty.
 
 `--ocr tesseract` re-reads those regions from the pixels, cropping them out of the page re-rendered at
-`--ocr-dpi` (400 by default — 200 is marginal for Tesseract on these scans). It runs **only** on regions that came back
-empty, so text the PDF actually carries is never second-guessed, and only on the labels named by `--ocr-labels`
-(default: `Header`). Figures are never OCR'd whatever the label set says. Readings below `--ocr-min-confidence` are
-discarded — an empty header is a smaller problem than a header full of noise.
+`--ocr-dpi` (400 by default — 200 is marginal for Tesseract on these scans). By default it runs **only** on regions
+that came back empty, so text the PDF actually carries is never second-guessed, and only on the labels named by
+`--ocr-labels` (default: `Header`). Figures are never OCR'd whatever the label set says. Readings below
+`--ocr-min-confidence`, or that score as junk at any confidence, are discarded — an empty header is a smaller problem
+than a header full of noise.
 
 Filled regions carry `provenance.text_source: "ocr:tesseract"` and `provenance.ocr_confidence` in the output JSON, so
 OCR'd text stays distinguishable from text the PDF carried. Everything else keeps `"pdf"`.
+
+##### Text that is present but wrong (`--ocr-retry`)
+
+Emptiness is the easy failure. The expensive one is a region the upstream OCR got *wrong* rather than missed: the
+headline JIŘÍ KYLIÁN arrives as `W Z7`, which is not empty and so is never re-read. `rare.parse.quality` scores a
+region's text against its box and its label and names what is wrong with it:
+
+| reason | what it catches |
+| --- | --- |
+| `junk` | most tokens are not words — no vowel, letters and digits mixed, or a run of bare single letters where letterspaced display type was read glyph by glyph (`0 GL A S N A D E S K A`). `W Z7` scores 2 of 2. |
+| `sparse` | far less text than a box that shape holds, measured by aspect ratio for one-line labels so type size drops out |
+| `alien` | too many characters from outside the Slovene alphabet — the `□` class of failure |
+
+`--ocr-retry` (bare, or with a subset like `--ocr-retry junk,alien`) sends those regions for a second reading too.
+Overwriting text is held to a higher standard than filling a hole, because the text being overwritten came from the
+publisher's own pass over the original film:
+
+* the reading needs `--ocr-min-replace-confidence` (60) rather than `--ocr-min-confidence` (40);
+* a reading that is itself junk is refused, so `W Z7` is never traded for `VV Z]` — and the region stays visibly broken
+  for a human instead of looking repaired;
+* a reading that throws away most of the region's letters is refused whatever its confidence — PP-OCR in particular
+  answers a broken region with a short, clean, confident string often enough to matter (`b e s e d a u r e d n i š t v a`
+  came back as `enista` at 67). The floor counts letters rather than characters, so the spaces letterspacing adds do
+  not make a genuine repair look like a loss;
+* when both readings score badly the new one wins only if it is at least twice as long, which is the case where the
+  text layer caught one word of a headline and Tesseract caught the line.
+
+A region whose text was replaced keeps `provenance.text_before_ocr` and `provenance.text_flags` alongside the usual
+markers, so every replacement can be reviewed after the run rather than taken on trust:
+
+```bash
+jq -r '.items[].provenance | select(.text_before_ocr) | "\(.text_flags)\t\(.text_before_ocr)"' \
+    outputs/parsed/<stem>/<stem>_doc.json
+```
+
+`examples/manual/audit/run.py` scores an OmniDocBench export with the same module, listing every failed region as a CSV
+with a blank `corrected_text` column — for the ones OCR cannot rescue and a person has to type.
 
 Needs the binary and the Slovenian language data, which is a separate package:
 
@@ -100,6 +138,41 @@ sudo apt install tesseract-ocr tesseract-ocr-slv
 
 Parsing fails immediately if the requested `--ocr-lang` is not installed, rather than falling back to English and
 filling the document with plausible-looking text whose diacritics are wrong.
+
+##### A second opinion (`--ocr ppocr`, `--ocr tesseract,ppocr`)
+
+Tesseract is not always enough. The two engines available here fail in *opposite* directions on the failure that is
+left once the empty regions are handled — letterspaced display type. Tesseract explodes the word into single letters
+(`0 GL A S N A D E S K A`); PP-OCRv5 collapses it into one (`yemavugankah` for a header reading "Tema v ugankah"). On
+an outline face Tesseract reads JIŘÍ KYLIÁN as `JA VLA` at confidence 25, while PP-OCR returns `JIRI KYLIÁN` at 0.91.
+
+`--ocr ppocr` swaps the backend; `--ocr tesseract,ppocr` reads every region with both and keeps the better answer — a
+reading that scores as junk loses to one that does not, and confidence only breaks the tie. That costs twice the
+recognition time per region and nothing per page, since the render is shared. The final say still belongs to the same
+gates: a winner that is junk for its label, or under the confidence floor, is discarded like any other reading.
+
+The PP-OCR path comes from `examples/manual/svrt/regions.py`, which stays the place to look at one region at a time and
+see why a reading came out the way it did. Two things it taught, both now baked in:
+
+* **Lines are cut before recognition, not by a model.** PaddleOCR's `TextRecognition` is a *line* recogniser — hand it
+  a three-line headline and it returns one garbled line. Its own `TextDetection` is the obvious cutter and aborts on
+  this paddle build (3.3.1) with `Intel oneMKL function load error`, so lines come from a horizontal ink profile
+  instead. That is reliable here because a layout region is already one block of one column. No detection model is
+  ever loaded.
+* **`--ocr-rec-model` decides which alphabet you get back.** The default `latin_PP-OCRv5_mobile_rec` is the
+  Latin-script multilingual head. The Chinese/English heads have no č, š or ž in their character dictionary and
+  transliterate them away without saying so.
+
+`--ocr-fill-outlines` solidifies hollow letterforms before recognition — flood-fill the background and ink whatever it
+never reached. On the outline headline above it recovers the caron at the cost of the I (`JİŘI KYLIÁN`, 0.88). Off by
+default, since it trades one error for another on filled type.
+
+PP-OCR confidences are reported on Tesseract's 0–100 scale so `--ocr-min-confidence` means one thing either way. Needs
+PaddleOCR, which is best installed into its own conda environment — it clashes with several of the other model extras:
+
+```bash
+pip install -e ".[pp-doclayoutv3]"      # paddleocr[all]
+```
 
 On the pipeline track, `--emit-omnidocbench` additionally writes one Markdown file per page to `outputs/parsed/<pdf_stem>/omnidocbench/<stem>_<page>.md` — the flat `<image_stem>.md` layout OmniDocBench's end-to-end evaluator mounts at `data_md/predictions`. These pages are rendered from the regions **as the DLA model detected them**, before the heuristic pass that re-joins paragraphs split across columns or pages, so the score reflects the model's own segmentation. The regular `<stem>.md` (and `--per-page` output under `pages/`) stay merged.
 
