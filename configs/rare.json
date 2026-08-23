@@ -1,0 +1,4 @@
+{
+  "coco_annotations_path": "./datasets/glasbena_mladina/annotations.json",
+  "weights_path": "./data"
+}
