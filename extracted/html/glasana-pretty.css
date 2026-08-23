@@ -1,0 +1,619 @@
+/* =========================================================
+   Glasana — editorial stylesheet (v2)
+
+   Written against the markup emitted by rare.doc.renderers.to_html:
+   .magazine > article[data-section][data-pages] > h1.article-title
+                                                 + .article-body > items
+   Every body item carries data-page / data-bbox provenance.
+
+   Layout is a named-line grid: prose sits in a comfortable measure,
+   figures and tables break out into the gutters. No external fonts,
+   no JS — these files are meant to be opened straight off disk.
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   Design tokens
+   --------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Palette — warm newsprint */
+  --paper:      #f6f2ea;
+  --card:       #fffdfa;
+  --ink:        #1c1a16;
+  --ink-soft:   #45403a;
+  --muted:      #857d72;
+  --rule:       #e2dad0;
+  --rule-soft:  #efe9e1;
+  --accent:     #a8321e;   /* burnt vermilion */
+  --accent-ink: #7c2415;
+  --accent-wash:#f6e7e2;
+  --highlight:  #fdf3d6;   /* soft gold, used sparingly */
+
+  /* Type */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua",
+                Georgia, "Times New Roman", serif;
+  --font-sans:  ui-sans-serif, "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:  ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Measure & rhythm */
+  --measure:    66ch;     /* prose column */
+  --gutter:     clamp(1rem, 4vw, 5rem);
+  --page-width: 78rem;
+  --lanes:
+    [full-start] minmax(var(--gutter), 1fr)
+    [wide-start]  minmax(0, 5rem)
+    [text-start]  min(100% - 2 * var(--gutter), var(--measure))
+    [text-end]    minmax(0, 5rem)
+    [wide-end]   minmax(var(--gutter), 1fr)
+    [full-end];
+  --radius:     14px;
+  --shadow:     0 1px 2px rgba(28, 26, 22, .05),
+                0 12px 32px -18px rgba(28, 26, 22, .35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:      #14130f;
+    --card:       #1c1a16;
+    --ink:        #ece6db;
+    --ink-soft:   #c9c1b4;
+    --muted:      #918878;
+    --rule:       #33302a;
+    --rule-soft:  #262420;
+    --accent:     #e2705a;
+    --accent-ink: #f0917e;
+    --accent-wash:#2a1c18;
+    --highlight:  #2e2716;
+    --shadow:     0 1px 2px rgba(0, 0, 0, .4),
+                  0 14px 34px -18px rgba(0, 0, 0, .8);
+  }
+}
+
+/* ---------------------------------------------------------
+   Reset
+   --------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
+}
+
+body {
+  font-family: var(--font-serif);
+  font-size: clamp(1rem, .96rem + .18vw, 1.075rem);
+  background: var(--paper);
+  color: var(--ink);
+  padding: clamp(1.5rem, 5vw, 4.5rem) var(--gutter) 6rem;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+}
+
+::selection { background: var(--accent); color: #fff; }
+
+a {
+  color: var(--accent-ink);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .15em;
+}
+a:hover { color: var(--accent); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* The OCR pipeline regularly emits placeholder elements with no text
+   (unmatched captions, empty table fallbacks, deduplicated quotes).
+   They would otherwise punch holes in the rhythm. */
+p:empty, h1:empty, h2:empty, h3:empty, blockquote:empty, pre:empty,
+figcaption:empty, cite:empty, address:empty, aside:empty, nav:empty,
+li:empty, span.dropcap:empty { display: none; }
+
+/* ---------------------------------------------------------
+   Page shell
+   --------------------------------------------------------- */
+.magazine {
+  max-width: var(--page-width);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 3vw, 3rem);
+}
+
+/* ---------------------------------------------------------
+   Article card
+   --------------------------------------------------------- */
+article {
+  position: relative;
+  /* Same named-line grid as .article-body, so the section chip lines up
+     with the prose column instead of floating in the gutter. */
+  display: grid;
+  grid-template-columns: var(--lanes);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding-block: clamp(2rem, 4vw, 3.25rem);
+  overflow: clip;                 /* keeps full-bleed children inside the radius */
+  scroll-margin-top: 2rem;
+}
+
+/* Hairline of colour along the top edge of every piece */
+article::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent) 22%, transparent 72%);
+  opacity: .9;
+  pointer-events: none;
+}
+
+article > * { grid-column: full; }
+
+/* Section eyebrow, drawn from the linker's data-section attribute */
+article[data-section]::before {
+  content: attr(data-section);
+  grid-column: text;
+  justify-self: start;
+  margin-bottom: .35rem;
+  padding: .3em .8em;
+  font-family: var(--font-sans);
+  font-size: .68rem;
+  font-weight: 650;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: var(--accent-wash);
+  border-radius: 999px;
+}
+
+/* The article title is duplicated by the in-body <h1> headline, so it is
+   kept for structure/search but hidden from view. */
+h1.article-title {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------
+   Body grid: text column + wide + full-bleed lanes
+   --------------------------------------------------------- */
+.article-body {
+  display: grid;
+  grid-template-columns: var(--lanes);
+  hyphens: auto;
+  hyphenate-limit-chars: 7 3 3;
+  orphans: 2;
+  widows: 2;
+}
+
+.article-body > * { grid-column: text; }
+
+.article-body > figure,
+.article-body > table,
+.article-body > pre { grid-column: wide; }
+
+/* ---------------------------------------------------------
+   Headings
+   --------------------------------------------------------- */
+.article-body > h1 {
+  font-size: clamp(2rem, 1.4rem + 2.4vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+  margin-block: .2em .5rem;
+}
+
+/* Secondary headlines inside the same piece step down a level */
+.article-body > h1:not(:first-of-type) {
+  font-size: clamp(1.5rem, 1.2rem + 1.1vw, 2rem);
+  margin-top: 2.2rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* Subheads are frequently stand-alone mini-headlines in this corpus,
+   so they get real presence rather than a tiny uppercase label. */
+.article-body > h2 {
+  font-size: clamp(1.25rem, 1.1rem + .7vw, 1.6rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.01em;
+  text-wrap: balance;
+  margin: 2.4rem 0 .6rem;
+}
+
+.article-body > h2::before {
+  content: "";
+  display: block;
+  width: 2.5rem;
+  height: 2px;
+  margin-bottom: .8rem;
+  background: var(--accent);
+}
+
+.article-body > h3 {
+  font-family: var(--font-sans);
+  font-size: .82rem;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  margin: 1.8rem 0 .4rem;
+}
+
+/* ---------------------------------------------------------
+   Kicker & deck
+   --------------------------------------------------------- */
+p.kicker {
+  font-family: var(--font-sans);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: .4rem;
+}
+
+p.deck {
+  font-size: 1.2rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  font-style: italic;
+  text-wrap: pretty;
+  margin-bottom: 1rem;
+}
+
+/* ---------------------------------------------------------
+   Body copy
+   --------------------------------------------------------- */
+.article-body p {
+  line-height: 1.68;
+  text-align: justify;
+  text-justify: inter-word;
+  margin-bottom: .85em;
+  text-wrap: pretty;
+}
+
+/* Drop cap on the opening paragraph of a piece */
+.article-body > h1:first-of-type + p::first-letter {
+  float: left;
+  font-size: 3.4em;
+  line-height: .82;
+  font-weight: 700;
+  color: var(--accent);
+  padding: .06em .08em 0 0;
+  margin-right: .02em;
+}
+
+/* Explicit Dropcap items from the layout model: OCR often captures these
+   as stray fragments, so keep them restrained rather than 5rem tall. */
+span.dropcap {
+  display: inline;
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------
+   Bylines
+   --------------------------------------------------------- */
+address {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: .72rem;
+  font-weight: 650;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Author lines sit under the headline… */
+address.author {
+  margin-bottom: 1.2rem;
+  color: var(--ink-soft);
+}
+
+/* …bylines close the piece, signature-style. */
+address.byline {
+  margin: 1.4rem 0 .6rem auto;
+  padding-top: .5rem;
+  width: fit-content;
+  max-width: 100%;
+  border-top: 1px solid var(--rule);
+  color: var(--accent-ink);
+}
+
+p.translator {
+  font-size: .85rem;
+  font-style: italic;
+  color: var(--muted);
+  margin-bottom: .8rem;
+}
+
+/* ---------------------------------------------------------
+   Quotes
+   --------------------------------------------------------- */
+blockquote {
+  position: relative;
+  margin: 1.8rem 0;
+  padding: .2rem 0 .2rem 1.6rem;
+  border-left: 3px solid var(--accent);
+  font-size: 1.16rem;
+  line-height: 1.45;
+  font-style: italic;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+  break-inside: avoid;
+}
+
+blockquote p { text-align: left; font-size: inherit; }
+
+/* ---------------------------------------------------------
+   Figures
+   --------------------------------------------------------- */
+figure {
+  margin: 2rem 0;
+  break-inside: avoid;
+}
+
+figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 85vh;
+  object-fit: contain;
+  background: var(--rule-soft);
+  border-radius: calc(var(--radius) - 6px);
+  border: 1px solid var(--rule);
+}
+
+/* p.caption is the fallback for a caption the linker could not attach
+   to a figure — give it the same voice, minus the figure. */
+figcaption,
+p.caption {
+  font-family: var(--font-sans);
+  font-size: .78rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-top: .7rem;
+  padding-left: .9rem;
+  border-left: 2px solid var(--accent);
+  text-wrap: pretty;
+}
+
+p.caption {
+  text-align: left;
+  margin: .6rem 0 1rem;
+}
+
+cite.fig-byline,
+p.figbyline {
+  display: block;
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: .68rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: .45rem;
+  text-align: right;
+}
+
+/* Cover: the leading, untitled article usually holds only page-1 scans. */
+.magazine > article:first-child:not([id]) {
+  padding-block: 0;
+  background: var(--paper);
+}
+
+.magazine > article:first-child:not([id]) .article-body > figure {
+  grid-column: full;
+  margin: 0;
+}
+
+.magazine > article:first-child:not([id]) figure img {
+  border: 0;
+  border-radius: 0;
+  max-height: none;
+}
+
+.magazine > article:first-child:not([id])::after { display: none; }
+
+/* ---------------------------------------------------------
+   Tables
+   --------------------------------------------------------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+  margin: 1.8rem 0;
+  font-variant-numeric: tabular-nums;
+  break-inside: avoid;
+}
+
+th {
+  padding: .55em .9em;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: .7rem;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--rule-soft);
+  border-bottom: 2px solid var(--rule);
+}
+
+td {
+  padding: .5em .9em;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+
+tbody tr:hover td { background: var(--highlight); }
+
+/* Raw OCR text kept when a table could not be reconstructed */
+pre, pre.table-fallback {
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  background: var(--rule-soft);
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin: 1.4rem 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------------------------------------------------------
+   Lists
+   --------------------------------------------------------- */
+ol, ul {
+  margin: 1rem 0 1rem 1.4rem;
+  line-height: 1.65;
+}
+
+li { margin-bottom: .35em; padding-left: .2em; }
+li::marker { color: var(--accent); }
+
+/* ---------------------------------------------------------
+   Furniture: footnotes, TOC, notes
+   --------------------------------------------------------- */
+aside.footnote {
+  font-family: var(--font-sans);
+  font-size: .76rem;
+  line-height: 1.55;
+  color: var(--muted);
+  border-top: 1px solid var(--rule);
+  margin-top: 2rem;
+  padding-top: .7rem;
+}
+
+nav.toc {
+  background: var(--rule-soft);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1.1rem 1.3rem;
+  font-size: .9rem;
+  line-height: 1.7;
+  margin: 1.4rem 0;
+}
+
+p.section {
+  font-family: var(--font-sans);
+  font-size: .72rem;
+  font-weight: 650;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: .6rem;
+}
+
+p.dateline, p.editnote, p.marginnote {
+  font-family: var(--font-sans);
+  font-size: .76rem;
+  font-style: italic;
+  color: var(--muted);
+  margin-bottom: .8rem;
+}
+
+p.marginnote {
+  border-left: 2px solid var(--rule);
+  padding-left: .9rem;
+}
+
+p.literary, p.literature {
+  font-style: italic;
+  color: var(--ink-soft);
+  border-left: 2px solid var(--rule);
+  padding-left: 1.1rem;
+  margin: 1.2rem 0;
+  text-align: left;
+}
+
+p.question {
+  font-weight: 700;
+  color: var(--accent-ink);
+  text-align: left;
+  margin-top: 1.2rem;
+}
+
+aside.advertisement { display: none; }
+
+/* ---------------------------------------------------------
+   Provenance affordance
+   Hovering a block reveals the source page it was lifted from —
+   handy when checking extraction quality against the scans.
+   --------------------------------------------------------- */
+@media (hover: hover) and (min-width: 60rem) {
+  .article-body > [data-page] { position: relative; }
+
+  .article-body > [data-page]:hover::after {
+    content: "s. " attr(data-page);
+    position: absolute;
+    top: .1em;
+    left: calc(100% + 1rem);
+    font-family: var(--font-sans);
+    font-size: .62rem;
+    font-weight: 650;
+    letter-spacing: .08em;
+    color: var(--muted);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: .12em .55em;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* article::before/::after are already taken on the card itself */
+  .article-body > figure:hover::after { top: .4rem; }
+}
+
+/* ---------------------------------------------------------
+   Narrow screens
+   --------------------------------------------------------- */
+@media (max-width: 48rem) {
+  body { padding-inline: .75rem; }
+  article { border-radius: 10px; }
+  .article-body p { text-align: left; hyphens: none; }
+  .article-body > h1:first-of-type + p::first-letter { font-size: 2.8em; }
+  blockquote { font-size: 1.05rem; }
+}
+
+/* ---------------------------------------------------------
+   Print
+   --------------------------------------------------------- */
+@media print {
+  :root { --paper: #fff; --card: #fff; --shadow: none; }
+  body { padding: 0; font-size: 10.5pt; }
+  article {
+    border: 0;
+    box-shadow: none;
+    break-after: page;
+    padding-block: 0 1.5rem;
+  }
+  article::after { display: none; }
+  figure, blockquote, table { break-inside: avoid; }
+  .article-body > h1, .article-body > h2 { break-after: avoid; }
+  .article-body > [data-page]:hover::after { display: none; }
+}
