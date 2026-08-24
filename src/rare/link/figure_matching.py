@@ -11,13 +11,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 
 from rare.doc.schema import CaptionItem, FigBylineItem, FigureItem, GlasanaDocument, Link
-from rare.link._geometry import (
-    box_of,
-    h_overlap_ratio,
-    is_below,
-    page_size,
-    vertical_gap,
-)
+from rare.link._geometry import box_of, page_size
 from rare.link.config import LinkConfig
 
 
@@ -122,10 +116,11 @@ def match_captions(figures, captions, page_w, page_h, **cost_kwargs):
     unmatched_figs  : figure indices with no valid caption
     unmatched_caps  : caption indices with no valid figure
     """
+    cost_kwargs.setdefault("max_gap_frac", 0.2)
     candidates = []
     for fi, fig in enumerate(figures):
         for ci, cap in enumerate(captions):
-            c = pair_cost(fig, cap, page_w, page_h, **cost_kwargs, max_gap_frac=0.2)
+            c = pair_cost(fig, cap, page_w, page_h, **cost_kwargs)
             if c is not None:
                 candidates.append((c, fi, ci))
 
@@ -147,37 +142,46 @@ def link_captions(doc: GlasanaDocument, config: LinkConfig) -> int:
     """Set `figure_id` on every caption we can place. Returns how many."""
     figures_by_page = defaultdict(list)
     captions_by_page = defaultdict(list)
+    bylines_by_page = defaultdict(list)
 
     for item in doc.items.values():
         page_no = item.provenance.page_no
         if isinstance(item, FigureItem):
             figures_by_page[page_no].append(item)
-        elif isinstance(item, (CaptionItem, FigBylineItem)):
+        elif isinstance(item, CaptionItem):
             captions_by_page[page_no].append(item)
+        elif isinstance(item, FigBylineItem):
+            bylines_by_page[page_no].append(item)
 
     linked = 0
-    for page_no, captions in captions_by_page.items():
-        figures = figures_by_page.get(page_no)
+    for page_no, figures in figures_by_page.items():
+        page_w, page_h = page_size(doc, page_no)
+        figure_boxes = [Box(*box_of(figure)) for figure in figures]
 
-        figure_boxes = [box_of(figure) for figure in figures]
-        caption_boxes = [box_of(caption) for caption in captions]
-
-        pairs, unmatched_figs, unmatched_caps = match_captions(figure_boxes, caption_boxes, page_no, config)
-
-        taken: set[str] = set()
-        for caption_id, figure_id, _ in pairs:
-            if caption_id in taken:
+        # Captions and photo credits are matched in separate 1:1 rounds. One
+        # round would make them compete: `match_captions` gives a figure a
+        # single partner, and a figure that carries both a caption and a credit
+        # would lose whichever scored worse.
+        for texts in (captions_by_page.get(page_no), bylines_by_page.get(page_no)):
+            if not texts:
                 continue
-            taken.add(caption_id)
-            doc.items[caption_id].figure_id = figure_id
-            doc.add_link(
-                Link(
-                    kind="caption-of",
-                    from_id=caption_id,
-                    to_id=figure_id,
-                    method="geometry",
-                )
+            pairs, _, _ = match_captions(
+                figure_boxes,
+                [Box(*box_of(text)) for text in texts],
+                page_w,
+                page_h,
             )
-            linked += 1
+            for figure_index, text_index, _cost in pairs:
+                caption, figure = texts[text_index], figures[figure_index]
+                caption.figure_id = figure.item_id
+                doc.add_link(
+                    Link(
+                        kind="caption-of",
+                        from_id=caption.item_id,
+                        to_id=figure.item_id,
+                        method="geometry",
+                    )
+                )
+                linked += 1
 
     return linked

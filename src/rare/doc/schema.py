@@ -431,7 +431,7 @@ class Link(BaseModel):
     link_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     kind: Literal[
         "caption-of",           # caption/figbyline -> figure    (item -> item)
-        "caption-to-article",   # orphaned caption  -> article   (item -> article)
+        "figure-to-article",    # figure + its caption -> article (item -> article)
         "article-continues",    # article absorbed a continuation (article -> article)
         "article-split",        # column -> piece cut out of it  (article -> article)
         "entity-overlap",       # items sharing a rare named entity (item -> item)

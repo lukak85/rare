@@ -20,9 +20,24 @@ class LinkConfig:
     # Captions print below their figure far more often than above.
     caption_below_bonus: float = 0.15
 
-    # --- orphan caption -> article -------------------------------------------
-    # How far a caption may be from an article's nearest item on the page.
-    orphan_max_distance_frac: float = 0.5
+    # --- figure group -> article ---------------------------------------------
+    # How far a figure group may be from an article's nearest item on the page,
+    # as a fraction of the page (the two axes are normalised and summed, so
+    # 0.35 is a third of the page away on one axis or less on both).
+    figure_link_max_distance_frac: float = 0.35
+    # Geometry and text carry the decision together; the weights need not sum
+    # to 1, they only set the exchange rate between the two.
+    figure_link_geometry_weight: float = 0.60
+    figure_link_ner_weight: float = 0.40
+    # A figure illustrates the text it follows, so an article element above it
+    # (or, within a line, to its left) is the likelier owner. Distances to
+    # elements on the other side are multiplied by these before comparison.
+    figure_link_below_penalty: float = 2.0
+    figure_link_side_penalty: float = 1.5
+    # Distance to an article: to its nearest element on the page, or the mean
+    # over all of them. Nearest is more robust when an article's other columns
+    # sit far away; the mean prefers the article that surrounds the figure.
+    figure_link_use_mean: bool = False
 
     # --- entity rarity --------------------------------------------------------
     # A key occurring in more than this share of articles carries no signal —
