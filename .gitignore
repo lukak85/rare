@@ -19,3 +19,4 @@ __pycache__/
 .eggs/
 build/
 dist/
+/.backup/
