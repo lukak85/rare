@@ -99,11 +99,12 @@ Emptiness is the easy failure. The expensive one is a region the upstream OCR go
 headline JIŘÍ KYLIÁN arrives as `W Z7`, which is not empty and so is never re-read. `rare.parse.quality` scores a
 region's text against its box and its label and names what is wrong with it:
 
-| reason | what it catches |
-| --- | --- |
-| `junk` | most tokens are not words — no vowel, letters and digits mixed, or a run of bare single letters where letterspaced display type was read glyph by glyph (`0 GL A S N A D E S K A`). `W Z7` scores 2 of 2. |
-| `sparse` | far less text than a box that shape holds, measured by aspect ratio for one-line labels so type size drops out |
-| `alien` | too many characters from outside the Slovene alphabet — the `□` class of failure |
+| reason   | what it catches                                                                                                                                                                                           |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `junk`   | most tokens are not words — no vowel, letters and digits mixed, or a run of bare single letters where letterspaced display type was read glyph by glyph (`0 GL A S N A D E S K A`). `W Z7` scores 2 of 2. |
+| `sparse` | far less text than a box that shape holds, measured by aspect ratio for one-line labels so type size drops out                                                                                            |
+| `alien`  | too many characters from outside the Slovene alphabet — the `□` class of failure                                                                                                                          |
+| `empty`  | empty region                                                                                                                                                                                              |
 
 `--ocr-retry` (bare, or with a subset like `--ocr-retry junk,alien`) sends those regions for a second reading too.
 Overwriting text is held to a higher standard than filling a hole, because the text being overwritten came from the
@@ -196,43 +197,28 @@ Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_
 
 #### Figure/caption → article attachment (`--track figure-link`)
 
-The annotations carry no article grouping, but their reading order places every Figure, Caption and FigByline
-immediately after the piece it illustrates. That gives a ground truth for the linking stage without annotating
-articles: **a visual belongs to the same article as the last body block before it in reading order** (its *anchor*,
-found by skipping the other visuals in its own run).
+There's two concerns with images in reading order:
+1. The models tested other than LayotutReader perform worse than heuristic on our dataset, and LayoutReader works with
+text lines, so providing it with figures would break the result.
+2. Figures can mostly be viewed in any order (at the start). Only their affiliation to the article is important. 
 
+Linking is done using 3 heuristics:
+1. Figure + caption's proximity to the article.
+2. NER similarity between caption and article.
+3. Position of the figure relative to the article and its header (their preferred position is to the upper-left direction).
+
+Evaluation of the resulting links:
 ```bash
 # Linking alone — documents are rebuilt from the ground-truth boxes and order,
 # so detection and reading order are perfect and only rare.link is measured.
 rare evaluate --track figure-link --dataset glasbena_mladina \
     --pdfs-dir datasets/glasbena_mladina/pdfs/eval
-
-# End to end — score the *_doc.json of a real parse; items are matched back to
-# the annotations by IoU, so misdetections and reading-order errors count too.
-rare evaluate --track figure-link --dataset glasbena_mladina \
-    --docs-dir outputs/parsed
 ```
-
-| Metric                    | Meaning                                                                                     |
-|---------------------------|---------------------------------------------------------------------------------------------|
-| `attachment_accuracy`     | visual and its anchor in the same predicted article, over the visuals where both were found |
-| `attachment_recall`       | same, over every visual the annotation places — an undetected figure counts against it      |
-| `separation`              | visual/block pairs on opposite sides of a Headline that ended up in **different** articles  |
-| `attachment_score`        | harmonic mean of accuracy and separation                                                    |
-| `caption_figure_accuracy` | a Caption/FigByline that follows a Figure carries that figure's `figure_id`                 |
-
-Accuracy and separation are reported together because each is trivial to win alone: one article for the whole
-magazine scores 1.0 on accuracy and 0.0 on separation, one article per block does the opposite.
-
-Results land in `outputs/evaluations/<run_id>/`: `attachment_summary.json` (overall plus per label, per page type
-and per document), `attachment_cases.jsonl` (one row per annotated visual — status, anchor, predicted article title)
-and the usual `report.md` / `scores.csv`.
 
 #### Page type vs article genre (`--track page-genre`)
 
-A first, deliberately blunt check on the classification pass: does the annotated `page_type` of a page agree with the
-`genre` of the articles predicted on it? The two vocabularies describe different things, so the comparison runs
-through one editable table, `PAGE_TYPE_TO_GENRE` in `rare/evaluate/page_genre.py`:
+Compares annotation of `page_type` to the `genre` determined by the classifier. Currently supported types (in alignment
+with selected page types):
 
 | Page type          | Expected genre              |
 |--------------------|-----------------------------|
@@ -251,30 +237,21 @@ through one editable table, `PAGE_TYPE_TO_GENRE` in `rare/evaluate/page_genre.py
 | `FrontPage`        | *not scored*                |
 | `BackPage`         | *not scored*                |
 
-`SpecialPage` and `BackPage` say how a page is laid out and where it sits in the issue, not what the piece on it is,
-so they are mapped to `null` and left out of the totals rather than counted as failures. Change any of that from a
-JSON file of `{page_type: genre | [genres] | null}` — a list accepts several genres, `null` retires a page type:
-
 ```bash
 # Score a real parse; genres come from whatever --classification produced.
-rare evaluate --track page-genre --dataset glasbena_mladina \
-    --docs-dir outputs/parsed [--page-type-map my_map.json]
-
-# Ground-truth layout instead. With no --classification, genres still come from
-# the running-header fallback in rare.link.classify — the cheap way to try a
-# change to the table.
-rare evaluate --track page-genre --dataset glasbena_mladina \
+rare evaluate --track page-genre --classification gams \
+    --dataset glasbena_mladina \
     --pdfs-dir datasets/glasbena_mladina/pdfs/eval
 ```
 
-A page can hold pieces of several genres, so the result is reported from three angles: `accuracy_dominant` (the
-article holding most of the page has the expected genre), `accuracy_any` (some article on the page does) and
-`article_accuracy` over every (page, article) pair — the truth for a mixed page is between the first two.
-`genre_coverage` is the share of scored pages carrying any genre at all; a low headline accuracy usually means
+Because a page can holds pieces of several genres, result is reported from three angles:
+1. `accuracy_dominant` (the  article holding most of the page has the expected genre, the way the pages were annotated
+in the first place), `accuracy_any` (some article on the page does) and
+2. `article_accuracy` over every (page, article) pair — the truth for a mixed page is between the first two.
+3. `genre_coverage` is the share of scored pages carrying any genre at all; a low headline accuracy usually means
 articles went unclassified, not that they were misclassified.
 
-`page_genre_summary.json` also holds the **confusion matrix** of page type against the genre actually predicted,
-which is what to read when deciding how the table should change; `page_genre_pages.jsonl` has one row per scored page.
+`page_genre_summary.json` holds the **confusion matrix** of page type against the predicted genres.
 
 #### OmniDocBench Layout detection metrics (`--run-omnidocbench`)
 
@@ -793,12 +770,12 @@ control and checking of calculations):
 
 ## Reading Order
 
-| Model                     | Normalized edit distance | Kendall Tau       | BLEU              |
-|---------------------------|--------------------------|-------------------|-------------------|
-| Top to bottom             | 0.6556                   | 0.3763            | 0.1007            |
-| Left to right             | <ins>0.2222</ins>        | 0.5857            | 0.6322            |
-| PaddleX's Improved XY-Cut | 0.2411                   | <ins>0.8107</ins> | <ins>0.6349</ins> |
-| LayoutReader              | **0.1696**               | **0.8599**        | **0.7143**        |
+| Model                     | Normalized edit distance | BLEU              |
+|---------------------------|--------------------------|-------------------|
+| Top to bottom             | 0.6556                   | 0.1007            |
+| Left to right             | <ins>0.2222</ins>        | 0.6322            |
+| PaddleX's Improved XY-Cut | 0.2411                   | <ins>0.6349</ins> |
+| LayoutReader              | **0.1696**               | **0.7143**        |
 
 
 ## VLM
@@ -861,9 +838,13 @@ comparable to the other VLMs, but is included for reference.
 
 ### Figure linking results
 
+Percentage of figures, captions and figure bylines correctly linked to their respsective articles using proximity,
+NER and additional heuristics.
 
 
 ### Classification results
+
+Number of correctly classified articles.
 
 | Model             | Matching |
 |-------------------|----------|
@@ -891,7 +872,6 @@ Top priority:
   - [x] Pipeline
   - [x] Specialized VLM
   - [x] General VLM
-    - [ ] Qwen3-VL
 
 # Limitations and Further Work
 

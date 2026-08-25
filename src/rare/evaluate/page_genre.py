@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Union
 
 from rare.doc.schema import ContentLayer, GlasanaDocument
-from rare.evaluate.figure_link import load_documents, split_stem_page
+from rare.evaluate.ground import load_documents, split_stem_page
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +279,7 @@ def run_page_genre(
     and per document) and `page_genre_pages.jsonl` (one row per scored page),
     plus the shared `report.md` / `scores.csv`.
     """
-    from rare.evaluate.figure_link import build_ground_documents, load_ground
+    from rare.evaluate.ground import build_ground_documents, load_ground
     from rare.evaluate.report import write_report
 
     run_dir = Path(run_dir)

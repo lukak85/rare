@@ -18,6 +18,7 @@ class YoutuBackend:
         if config is not None:
             self.model_path, self.angle_correct_model_path = config['model_path'], config['angle_correct_model_path']
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # Force everything on the same device
+        self.verbose = True
 
     def _get_converter(self):
         if self._converter is None:
@@ -61,7 +62,9 @@ class YoutuBackend:
                     input_path=image_path,     # Input document path
                     output_dir=out_md_dir      # Output directory for results
                 )
-            except:
+            except Exception as e:
+                if self.verbose:
+                    print(e)
                 try:
                     import re
                     lower_res_image_path = re.sub(r"/eval_\d+dpi/", "/eval/", image_path)
@@ -70,7 +73,9 @@ class YoutuBackend:
                         input_path=lower_res_image_path,     # Input document path
                         output_dir=out_md_dir      # Output directory for results
                     )
-                except:
+                except Exception as e2:
+                    if self.verbose:
+                        print(e2)
                     print("Skipping " + image_path)
                     pass
 

@@ -1,649 +1,380 @@
-"""Figure/caption → article attachment, scored against the annotated reading order.
+"""Where does a figure go when nobody has told it? — figure → article scoring.
 
-The Glasbena Mladina annotations carry no article grouping of their own, but
-they do carry a per-page reading order in which a Figure, Caption or FigByline
-is placed immediately after the piece it illustrates. That gives one local
-ground-truth rule, and it is the only one used here:
+The annotations never say which article a photo belongs to. What they do say is
+the reading order of every region on a page, and in that order a Figure,
+Caption or FigByline sits with the piece it illustrates. Parsing the COCO
+ground truth with that order as the base therefore already yields the answer:
+`assemble_page` hands every region the article that was open at its `order_id`,
+so a visual's article is the one whose text it interrupts.
 
-    a visual belongs to the same article as the last body block before it in
-    reading order (skipping the other visuals in its own run).
+This module takes that document and **holds the visuals out of it**. Every
+Figure, Caption and FigByline is stripped of its article and its caption
+pairing; the article partition of everything else is left exactly as the ground
+truth has it. Then the two linking passes that place visuals are re-run:
 
-That block is the visual's *anchor*. Scoring is therefore agnostic about where
-articles begin and end — it never has to reconstruct ground-truth articles,
-only to ask whether two annotated regions ended up together.
+    figure_matching.link_captions   caption / photo credit -> figure
+    figure_link.link_figures        that group -> the article it illustrates
 
-Two numbers come out of it, because the rule on its own can be satisfied by
-doing nothing:
-
-* `attachment_accuracy` — is the visual in the same predicted article as its
-  anchor? A parser that dropped every boundary and put the whole magazine into
-  one article scores 1.0 here.
-* `separation` — is the visual kept *out* of the articles it must not be in?
-  Ground truth for "must not" comes from Headlines: on a page, everything after
-  a Headline is a different piece from everything before it, so a visual and a
-  body block on opposite sides of one form a pair that has to end up in two
-  different articles. A parser that gave every block its own article scores 1.0
-  here, and 0.0 on attachment.
-
-`attachment_score` is their harmonic mean, so only a parser that gets both
-right wins. `attachment_recall` is the end-to-end view of the first number:
-correct attachments over every visual the annotation places, so a figure the
-detector never found counts against the total instead of quietly leaving the
-denominator.
-
-A third, narrower metric comes from the same ordering: a Caption or FigByline
-that directly follows a Figure belongs to that figure, which is exactly what
-`rare.link.figures` decides from geometry — reported as
-`caption_figure_accuracy`.
-
-Both tracks the module supports feed the same scorer:
-
-* **oracle** — build documents from the ground-truth boxes and the ground-truth
-  order (`build_ground_documents`) and run the linker over them. Detection and
-  reading order are perfect, so the numbers are about `rare.link` alone.
-* **end-to-end** — score the `*_doc.json` of a real parse, whose items are
-  matched back to the annotations by IoU.
+and each visual is scored on whether it came back to the article it started in.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import uuid
-from collections import defaultdict
-from dataclasses import dataclass, field
+from collections import Counter, defaultdict
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Optional
+from typing import Iterable, Optional
 
-from rare.doc.schema import GlasanaDocument
-from rare.evaluate._matching import match_by_iou
+from rare.doc.schema import (
+    CaptionItem,
+    FigBylineItem,
+    FigureItem,
+    GlasanaDocument,
+)
+from rare.evaluate.ground import load_documents, split_stem_page
+from rare.link import entities, figure_link, figure_matching
+from rare.link._geometry import box_of
+from rare.link.config import LinkConfig
 
 logger = logging.getLogger(__name__)
 
-# Page chrome: never part of an article, and annotated at the tail of the page
-# order rather than in the flow, so it must not be able to anchor a visual.
-FURNITURE_LABELS = frozenset({"Header", "Footer", "PageNum", "Abandon"})
+# The regions this module scores. Taken from the pass under test rather than
+# restated, so the two can never drift apart.
+VISUAL_TYPES = figure_link.VISUAL_TYPES
 
-# The regions whose article membership this module scores. They are also the
-# regions skipped when walking back to an anchor: a caption's neighbour is its
-# figure, not the block the pair as a whole hangs off.
-VISUAL_LABELS = frozenset({"Figure", "Caption", "FigByline"})
+# Every visual ends up under exactly one of these. The `skipped_` ones are
+# reported but kept out of the accuracy — the linker was never given a fair
+# question in those cases, and scoring them either way would be a fiction.
+OUTCOMES = (
+    "correct",                    # came back to the article it started in
+    "wrong_article",              # placed in a different one
+    "no_article",                 # the linker declined to place it at all
+    "skipped_no_anchor",          # nothing precedes it in reading order
+    "skipped_anchor_no_article",  # the block it follows is in no article
+    "skipped_gt_article_empty",   # its article is visuals-only: unreachable
+)
 
-# Labels that open a new piece, used to derive the "must not be together"
-# pairs. Only Headline is safe: Subhead and Section also occur inside a piece.
-BOUNDARY_LABELS = frozenset({"Headline"})
+# The config variants scored side by side. `full` is whatever the caller
+# configured; the rest isolate one signal each, and `nearest` is the baseline
+# every heuristic here has to beat to justify itself.
+VARIANTS: dict[str, dict] = {
+    "full": {},
+    "geometry": {"figure_link_ner_weight": 0.0},
+    "ner": {"figure_link_geometry_weight": 0.0},
+    "nearest": {
+        "figure_link_geometry_weight": 1.0,
+        "figure_link_ner_weight": 0.0,
+        "figure_link_below_penalty": 1.0,
+        "figure_link_side_penalty": 1.0,
+    },
+    # Distance to an article's *mean* item rather than its nearest. The default
+    # (nearest) lets an article that wraps around the page beat the short piece
+    # directly above a photo, because one of its many columns is always a few
+    # pixels away; the mean asks which article actually surrounds the figure.
+    "mean": {"figure_link_use_mean": True},
+}
 
 
 # ---------------------------------------------------------------------------
-# Ground truth
+# Ground truth: the article a visual interrupts
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class GroundRegion:
-    ann_id: int
-    label: str
-    page_no: int
-    bbox: tuple[float, float, float, float]   # x1, y1, x2, y2, annotation pixels
-    order_id: int
-    run: int                                   # index of the Headline-delimited run
+def ground_articles(doc: GlasanaDocument) -> dict[str, tuple[bool, Optional[str]]]:
+    """`{item_id: (had_anchor, article_id)}` for every visual, from reading order.
 
+    Walks `body_order` — which is already the annotated order, page by page,
+    with furniture excluded — and remembers the last non-visual block. That
+    block is the visual's *anchor*, and its article is the answer.
 
-@dataclass
-class GroundPage:
-    image_id: int
-    pdf_stem: str
-    page_no: int
-    width: float
-    height: float
-    page_type: Optional[str]
-    regions: list[GroundRegion]                # every annotation, in reading order
+    `had_anchor` separates the two ways the answer can be missing: nothing
+    precedes the visual at all (a photo opening the issue), or the block it
+    follows is itself in no article. Both are unscoreable, for different
+    reasons, and the summary says which.
 
-
-@dataclass(frozen=True)
-class GroundAttachment:
-    """One annotated visual and what the reading order says it belongs with."""
-    ann_id: int
-    label: str
-    page_no: int
-    page_type: Optional[str]
-    bbox: tuple[float, float, float, float]
-    anchor_ann_id: Optional[int]               # None when nothing precedes it
-    anchor_label: Optional[str]
-    anchor_page_no: Optional[int]
-    anchor_cross_page: bool
-    figure_ann_id: Optional[int]               # for Caption/FigByline only
-    foreign_ann_ids: tuple[int, ...]           # same page, other side of a Headline
-
-
-@dataclass
-class GroundDoc:
-    pdf_stem: str
-    pages: dict[int, GroundPage] = field(default_factory=dict)
-    attachments: list[GroundAttachment] = field(default_factory=list)
-
-
-def split_stem_page(file_name: str) -> tuple[str, int]:
-    """"<stem>_<page>.jpg" → (stem, page_no); (full stem, 0) when it doesn't fit."""
-    name = Path(file_name).name
-    parts = name.rsplit("_", 1)
-    if len(parts) == 2:
-        try:
-            return parts[0], int(parts[1].rsplit(".", 1)[0])
-        except ValueError:
-            pass
-    return Path(name).stem, 0
-
-
-def _page_regions(anns: list[dict], categories: dict[int, str], page_no: int) -> list[GroundRegion]:
-    """A page's annotations as `GroundRegion`s in reading order, runs assigned.
-
-    Annotations without an `order_id` fall to the end in their original order —
-    the same convention `rare.evaluate.datasets` uses.
+    Deliberately not `visual.article_id`: a document parsed with linking on has
+    already had `link_figures` move its visuals, so the value stored on a
+    figure is the heuristic's own answer rather than the ground truth. The
+    anchor rule recovers the reading-order base from either kind of document.
     """
-    with_order = [a for a in anns if a.get("order_id") is not None]
-    without = [a for a in anns if a.get("order_id") is None]
-    ordered = sorted(with_order, key=lambda a: a["order_id"]) + without
+    truth: dict[str, tuple[bool, Optional[str]]] = {}
+    anchor: Optional[object] = None
 
-    regions: list[GroundRegion] = []
-    run = 0
-    for position, ann in enumerate(ordered):
-        label = categories.get(ann["category_id"], "")
-        if label in BOUNDARY_LABELS:
-            run += 1
-        x, y, w, h = ann["bbox"]
-        regions.append(GroundRegion(
-            ann_id=ann["id"],
-            label=label,
-            page_no=page_no,
-            bbox=(x, y, x + w, y + h),
-            order_id=ann.get("order_id", position),
-            run=run,
-        ))
-    return regions
-
-
-def _anchor_of(body: list[GroundRegion], index: int) -> Optional[GroundRegion]:
-    """The nearest body block before `body[index]` that is not itself a visual."""
-    for j in range(index - 1, -1, -1):
-        if body[j].label not in VISUAL_LABELS:
-            return body[j]
-    return None
-
-
-def _figure_of(body: list[GroundRegion], index: int) -> Optional[GroundRegion]:
-    """The Figure a Caption/FigByline at `body[index]` follows, if any.
-
-    Walks back over other captions — a figure may carry both a caption and a
-    photo credit — but stops at the first body block, since a caption separated
-    from every figure by running text is not attributable from order alone.
-    """
-    for j in range(index - 1, -1, -1):
-        if body[j].label == "Figure":
-            return body[j]
-        if body[j].label not in VISUAL_LABELS:
-            return None
-    return None
-
-
-def load_ground(
-    coco_path: str | Path,
-    cross_page_anchor: bool = True,
-) -> dict[str, GroundDoc]:
-    """Derive per-document attachment ground truth from a COCO file with `order_id`.
-
-    Returns `{pdf_stem: GroundDoc}`. When `cross_page_anchor` is true a visual
-    that opens a page — 12% of them, mostly a photo at the top of a page whose
-    article started on the one before — is anchored to the last body block of
-    the previous page, the document-level reading order being the concatenation
-    of the page-level ones. With it false, those visuals are reported as
-    `anchor_missing` instead and left out of the accuracy denominator.
-    """
-    raw = json.loads(Path(coco_path).read_text())
-    categories = {c["id"]: c["name"] for c in raw["categories"]}
-
-    anns_by_image: dict[int, list[dict]] = defaultdict(list)
-    for ann in raw["annotations"]:
-        anns_by_image[ann["image_id"]].append(ann)
-
-    docs: dict[str, GroundDoc] = {}
-    for info in raw["images"]:
-        stem, page_no = split_stem_page(info["file_name"])
-        doc = docs.setdefault(stem, GroundDoc(pdf_stem=stem))
-        doc.pages[page_no] = GroundPage(
-            image_id=info["id"],
-            pdf_stem=stem,
-            page_no=page_no,
-            width=float(info["width"]),
-            height=float(info["height"]),
-            page_type=info.get("page_type"),
-            regions=_page_regions(anns_by_image.get(info["id"], []), categories, page_no),
-        )
-
-    for doc in docs.values():
-        _attachments(doc, cross_page_anchor=cross_page_anchor)
-    return docs
-
-
-def _attachments(doc: GroundDoc, cross_page_anchor: bool) -> None:
-    """Fill `doc.attachments` from its pages' reading orders."""
-    previous_tail: Optional[GroundRegion] = None   # last body block of the previous page
-
-    for page_no in sorted(doc.pages):
-        page = doc.pages[page_no]
-        body = [r for r in page.regions if r.label not in FURNITURE_LABELS]
-
-        for index, region in enumerate(body):
-            if region.label not in VISUAL_LABELS:
-                continue
-
-            anchor = _anchor_of(body, index)
-            cross_page = False
-            if anchor is None and cross_page_anchor:
-                anchor = previous_tail
-                cross_page = anchor is not None
-
-            figure = _figure_of(body, index) if region.label != "Figure" else None
-            foreign = tuple(
-                r.ann_id for r in body
-                if r.run != region.run and r.label not in VISUAL_LABELS
+    for item in doc.iter_body():
+        if isinstance(item, VISUAL_TYPES):
+            truth[item.item_id] = (
+                anchor is not None,
+                anchor.article_id if anchor is not None else None,
             )
-
-            doc.attachments.append(GroundAttachment(
-                ann_id=region.ann_id,
-                label=region.label,
-                page_no=page_no,
-                page_type=page.page_type,
-                bbox=region.bbox,
-                anchor_ann_id=anchor.ann_id if anchor else None,
-                anchor_label=anchor.label if anchor else None,
-                anchor_page_no=anchor.page_no if anchor else None,
-                anchor_cross_page=cross_page,
-                figure_ann_id=figure.ann_id if figure else None,
-                foreign_ann_ids=foreign,
-            ))
-
-        tail = [r for r in body if r.label not in VISUAL_LABELS]
-        if tail:
-            previous_tail = tail[-1]
+        else:
+            anchor = item
+    return truth
 
 
-# ---------------------------------------------------------------------------
-# Matching predictions to annotations
-# ---------------------------------------------------------------------------
+def caption_figures(doc: GlasanaDocument) -> dict[str, Optional[str]]:
+    """`{caption/byline item_id: figure item_id}` by reading-order adjacency.
 
-class _Box:
-    """Minimal stand-in for `lp.TextBlock` — `match_by_iou` only reads `.coordinates`."""
-    __slots__ = ("coordinates",)
-
-    def __init__(self, coordinates: tuple[float, float, float, float]) -> None:
-        self.coordinates = coordinates
-
-
-def match_items(
-    doc: GlasanaDocument,
-    ground: GroundDoc,
-    iou_threshold: float = 0.5,
-) -> dict[int, str]:
-    """Map each annotation id to the id of the document item that covers it.
-
-    Ground boxes are in annotation-image pixels and document items in rendered
-    page pixels, so every page is rescaled by its own width/height ratio before
-    matching (the two rasterisations are not always the same aspect ratio to
-    the pixel). Matching is greedy 1-1 by IoU, as everywhere else in the eval.
+    The nearest Figure before it on the same page, which is where a caption is
+    annotated. Approximate — a caption set above its figure is scored wrong
+    here — so the number it feeds is reported as a secondary reading only.
     """
-    matches: dict[int, str] = {}
+    pairs: dict[str, Optional[str]] = {}
+    last_figure: dict[int, str] = {}
 
-    items_by_page: dict[int, list] = defaultdict(list)
+    for item in doc.iter_body():
+        page_no = item.provenance.page_no
+        if isinstance(item, FigureItem):
+            last_figure[page_no] = item.item_id
+        elif isinstance(item, (CaptionItem, FigBylineItem)):
+            pairs[item.item_id] = last_figure.get(page_no)
+    return pairs
+
+
+# ---------------------------------------------------------------------------
+# Hold the visuals out
+# ---------------------------------------------------------------------------
+
+def hold_out_visuals(doc: GlasanaDocument) -> set[str]:
+    """Undo every placement decision about visuals. Returns the ids held out.
+
+    Their article, their caption pairing and the links recording both are
+    removed; everything else — the article partition this is scored against —
+    is left untouched. `articles.rebuild` is deliberately *not* called: it
+    deletes articles left with no items, which is exactly the ground truth an
+    all-visual article carries.
+    """
+    held: set[str] = set()
+
     for item in doc.items.values():
-        items_by_page[item.provenance.page_no].append(item)
-
-    for page_no, page in ground.pages.items():
-        doc_page = doc.pages.get(page_no)
-        items = items_by_page.get(page_no)
-        if doc_page is None or not items or not page.regions:
+        if not isinstance(item, VISUAL_TYPES):
             continue
+        held.add(item.item_id)
+        item.article_id = None
+        if isinstance(item, (CaptionItem, FigBylineItem)):
+            item.figure_id = None
 
-        sx = doc_page.width / page.width if page.width else 1.0
-        sy = doc_page.height / page.height if page.height else 1.0
+    for article in doc.articles.values():
+        article.item_ids = [i for i in article.item_ids if i not in held]
 
-        predicted = []
-        for item in items:
-            box = item.provenance.get_bbox()
-            predicted.append(_Box((box.x1, box.y1, box.x2, box.y2)))
-        truth = [
-            _Box((r.bbox[0] * sx, r.bbox[1] * sy, r.bbox[2] * sx, r.bbox[3] * sy))
-            for r in page.regions
-        ]
-
-        for pred_index, gt_index in match_by_iou(predicted, truth, iou_threshold):
-            matches[page.regions[gt_index].ann_id] = items[pred_index].item_id
-
-    return matches
-
-
-# ---------------------------------------------------------------------------
-# Scoring
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Tally:
-    """Raw counts; every rate reported is derived from these."""
-    visuals: int = 0
-    visual_unmatched: int = 0
-    anchor_missing: int = 0
-    anchor_unmatched: int = 0
-    anchor_no_article: int = 0
-    correct: int = 0
-    wrong: int = 0
-    no_article: int = 0
-    cross_page_anchors: int = 0
-    separation_pairs: int = 0
-    separation_correct: int = 0
-    caption_figure_scored: int = 0
-    caption_figure_correct: int = 0
-
-    def add(self, other: "Tally") -> None:
-        for key, value in vars(other).items():
-            setattr(self, key, getattr(self, key) + value)
-
-    @property
-    def scored(self) -> int:
-        """Visuals where both sides were found, so the linker could be judged."""
-        return self.correct + self.wrong + self.no_article
-
-    @property
-    def answerable(self) -> int:
-        """Visuals the annotation actually places — the honest recall denominator.
-
-        A visual with no anchor at all (the first body region of the document,
-        or of a page when cross-page anchoring is off) states nothing about any
-        article, so it is not something a parser can get wrong.
-        """
-        return self.visuals - self.anchor_missing
-
-    def rates(self) -> dict[str, float]:
-        accuracy = self.correct / self.scored if self.scored else 0.0
-        recall = self.correct / self.answerable if self.answerable else 0.0
-        separation = (
-            self.separation_correct / self.separation_pairs
-            if self.separation_pairs else 0.0
+    doc.links = [
+        link
+        for link in doc.links
+        if not (
+            link.kind in ("caption-of", "figure-to-article")
+            and (link.from_id in held or link.to_id in held)
         )
-        both = accuracy + separation
-        out = {
-            "attachment_accuracy": accuracy,
-            "attachment_recall": recall,
-            "separation": separation,
-            "attachment_score": (2 * accuracy * separation / both) if both else 0.0,
-        }
-        if self.caption_figure_scored:
-            out["caption_figure_accuracy"] = (
-                self.caption_figure_correct / self.caption_figure_scored
-            )
-        return out
+    ]
+    return held
 
-    def as_dict(self) -> dict[str, float]:
-        return {
-            **vars(self),
-            "scored": self.scored,
-            "answerable": self.answerable,
-            **self.rates(),
-        }
+
+def relink(doc: GlasanaDocument, config: LinkConfig) -> dict[str, str]:
+    """Re-run the two passes that place visuals. Returns `{item_id: method}`.
+
+    The same order `rare.link.link_document` uses, with everything that would
+    reshape the articles left out: the partition stays at ground truth, so a
+    miss is attributable to these two passes and nothing else. The entity index
+    is built after the hold-out, so a caption's own names never count towards
+    the article it used to sit in.
+    """
+    figure_matching.link_captions(doc, config)
+    index = entities.EntityIndex(doc, config)
+    figure_link.link_figures(doc, index, config)
+
+    # `link_figures` records its reasoning against the group's leader — the
+    # figure, or a stray caption standing alone. Spread it back over the group
+    # the same way the pass formed it, so every visual carries the method that
+    # decided its article.
+    method_of_leader = {
+        link.from_id: link.method
+        for link in doc.links
+        if link.kind == "figure-to-article"
+    }
+
+    methods: dict[str, str] = {}
+    for item in doc.items.values():
+        if not isinstance(item, VISUAL_TYPES):
+            continue
+        leader = item.item_id
+        if isinstance(item, (CaptionItem, FigBylineItem)) and item.figure_id:
+            leader = item.figure_id
+        method = method_of_leader.get(leader)
+        if method:
+            methods[item.item_id] = method
+    return methods
+
+
+# ---------------------------------------------------------------------------
+# Score
+# ---------------------------------------------------------------------------
+
+def summarise(outcomes: Counter) -> dict:
+    """Outcome counts plus the rates derived from them."""
+    scored = outcomes["correct"] + outcomes["wrong_article"] + outcomes["no_article"]
+    skipped = sum(v for k, v in outcomes.items() if k.startswith("skipped"))
+    placed = outcomes["correct"] + outcomes["wrong_article"]
+    return {
+        **{name: outcomes.get(name, 0) for name in OUTCOMES},
+        "visuals": scored + skipped,
+        "scored": scored,
+        "skipped": skipped,
+        "accuracy": outcomes["correct"] / scored if scored else 0.0,
+        # How much of the corpus the accuracy above actually speaks for.
+        "coverage": scored / (scored + skipped) if (scored + skipped) else 0.0,
+        # How often the linker committed to an answer at all.
+        "assignment_rate": placed / scored if scored else 0.0,
+    }
 
 
 def score_document(
     doc: GlasanaDocument,
-    ground: GroundDoc,
-    iou_threshold: float = 0.5,
-) -> tuple[Tally, dict[str, Tally], dict[str, Tally], list[dict]]:
-    """Score one document. Returns (totals, by label, by page type, per-visual cases).
+    config: LinkConfig,
+    page_types: Optional[dict[tuple[str, int], str]] = None,
+) -> tuple[Counter, dict[str, Counter], dict[str, Counter], Counter, list[dict]]:
+    """Hold the visuals out of one document, put them back, and score the result.
 
-    The cases are one row per annotated visual, carrying enough context —
-    predicted article titles, the anchor's label and page — to look an error up
-    in the rendered HTML without re-running anything.
+    `doc` is mutated. Returns the outcome counts, the same split by label and
+    by method, the caption→figure tally, and one row per visual.
     """
-    matches = match_items(doc, ground, iou_threshold)
-    totals = Tally()
-    by_label: dict[str, Tally] = defaultdict(Tally)
-    by_page_type: dict[str, Tally] = defaultdict(Tally)
-    cases: list[dict] = []
+    stem = Path(doc.source_pdf).stem or doc.source_pdf
 
-    def article_of(ann_id: Optional[int]) -> Optional[str]:
-        item_id = matches.get(ann_id) if ann_id is not None else None
-        item = doc.items.get(item_id) if item_id else None
-        return item.article_id if item else None
+    truth = ground_articles(doc)
+    caption_truth = caption_figures(doc)
+    # An article the hold-out empties has no items left to be found by.
+    non_visual_members = {
+        item.article_id
+        for item in doc.items.values()
+        if item.article_id and not isinstance(item, VISUAL_TYPES)
+    }
+
+    hold_out_visuals(doc)
+    methods = relink(doc, config)
+
+    outcomes: Counter = Counter()
+    by_label: dict[str, Counter] = defaultdict(Counter)
+    by_method: dict[str, Counter] = defaultdict(Counter)
+    captions: Counter = Counter()
+    cases: list[dict] = []
 
     def title_of(article_id: Optional[str]) -> str:
         article = doc.articles.get(article_id) if article_id else None
         return article.title if article else ""
 
-    for attachment in ground.attachments:
-        tallies = [totals, by_label[attachment.label], by_page_type[attachment.page_type or "?"]]
-        for tally in tallies:
-            tally.visuals += 1
-            if attachment.anchor_cross_page:
-                tally.cross_page_anchors += 1
+    for item_id, (had_anchor, expected) in truth.items():
+        item = doc.items[item_id]
+        actual = item.article_id
 
-        visual_item_id = matches.get(attachment.ann_id)
-        visual_article = article_of(attachment.ann_id)
-        anchor_article = article_of(attachment.anchor_ann_id)
-
-        if visual_item_id is None:
-            status = "visual_unmatched"
-        elif attachment.anchor_ann_id is None:
-            status = "anchor_missing"
-        elif matches.get(attachment.anchor_ann_id) is None:
-            status = "anchor_unmatched"
-        elif anchor_article is None:
-            status = "anchor_no_article"
-        elif visual_article is None:
-            status = "no_article"
-        elif visual_article == anchor_article:
-            status = "correct"
+        if not had_anchor:
+            outcome = "skipped_no_anchor"
+        elif expected is None:
+            outcome = "skipped_anchor_no_article"
+        elif expected not in non_visual_members:
+            outcome = "skipped_gt_article_empty"
+        elif actual is None:
+            outcome = "no_article"
+        elif actual == expected:
+            outcome = "correct"
         else:
-            status = "wrong"
+            outcome = "wrong_article"
 
-        for tally in tallies:
-            setattr(tally, status, getattr(tally, status) + 1)
+        method = methods.get(item_id, "none")
+        label = item.category.value
+        outcomes[outcome] += 1
+        by_label[label][outcome] += 1
+        if not outcome.startswith("skipped"):
+            by_method[method][outcome] += 1
 
-        # Separation: only meaningful once the visual has an article at all.
-        pairs = failures = 0
-        if visual_article is not None:
-            for foreign_id in attachment.foreign_ann_ids:
-                foreign_article = article_of(foreign_id)
-                if foreign_article is None:
-                    continue
-                pairs += 1
-                failures += int(foreign_article == visual_article)
-            for tally in tallies:
-                tally.separation_pairs += pairs
-                tally.separation_correct += pairs - failures
-
-        # Caption → figure, the geometric link `rare.link.figures` makes.
-        caption_figure = None
-        if attachment.figure_ann_id is not None and visual_item_id is not None:
-            figure_item_id = matches.get(attachment.figure_ann_id)
-            if figure_item_id is not None:
-                predicted_figure = getattr(doc.items[visual_item_id], "figure_id", None)
-                caption_figure = predicted_figure == figure_item_id
-                for tally in tallies:
-                    tally.caption_figure_scored += 1
-                    tally.caption_figure_correct += int(caption_figure)
-
+        page_no = item.provenance.page_no
         cases.append({
-            "pdf_stem": ground.pdf_stem,
-            "page_no": attachment.page_no,
-            "page_type": attachment.page_type,
-            "label": attachment.label,
-            "status": status,
-            "bbox": list(attachment.bbox),
-            "anchor_label": attachment.anchor_label,
-            "anchor_page_no": attachment.anchor_page_no,
-            "anchor_cross_page": attachment.anchor_cross_page,
-            "predicted_article": visual_article,
-            "predicted_article_title": title_of(visual_article),
-            "anchor_article": anchor_article,
-            "anchor_article_title": title_of(anchor_article),
-            "separation_pairs": pairs,
-            "separation_failures": failures,
-            "caption_figure_correct": caption_figure,
+            "pdf_stem": stem,
+            "page_no": page_no,
+            "page_type": (page_types or {}).get((stem, page_no)),
+            "label": label,
+            "outcome": outcome,
+            "method": method,
+            "put_in": title_of(actual),
+            "should_be": title_of(expected),
+            "bbox": list(box_of(item)),
         })
 
-    return totals, dict(by_label), dict(by_page_type), cases
+    for item_id, expected_figure in caption_truth.items():
+        if expected_figure is None:
+            continue
+        actual_figure = doc.items[item_id].figure_id
+        captions["scored"] += 1
+        captions["correct"] += int(actual_figure == expected_figure)
+
+    return outcomes, by_label, by_method, captions, cases
 
 
 def evaluate_documents(
     docs: Iterable[GlasanaDocument],
-    ground: dict[str, GroundDoc],
-    iou_threshold: float = 0.5,
+    config: LinkConfig,
+    page_types: Optional[dict[tuple[str, int], str]] = None,
 ) -> tuple[dict, list[dict]]:
-    """Score every document against its ground truth; returns (summary, cases).
-
-    Documents are paired with ground truth by `source_pdf`; one with no entry
-    there is skipped, and a warning names it — silently scoring nothing would
-    look like a perfect run.
-    """
-    totals = Tally()
-    by_label: dict[str, Tally] = defaultdict(Tally)
-    by_page_type: dict[str, Tally] = defaultdict(Tally)
-    by_document: dict[str, Tally] = {}
+    """Score every document under one config; returns (summary, cases)."""
+    totals: Counter = Counter()
+    label_totals: dict[str, Counter] = defaultdict(Counter)
+    method_totals: dict[str, Counter] = defaultdict(Counter)
+    page_type_totals: dict[str, Counter] = defaultdict(Counter)
+    by_document: dict[str, Counter] = {}
+    captions: Counter = Counter()
     all_cases: list[dict] = []
 
     for doc in docs:
         stem = Path(doc.source_pdf).stem or doc.source_pdf
-        doc_ground = ground.get(stem) or ground.get(doc.source_pdf)
-        if doc_ground is None:
-            logger.warning("no ground truth for document %r; skipped", doc.source_pdf)
-            continue
-
-        doc_totals, doc_labels, doc_types, cases = score_document(
-            doc, doc_ground, iou_threshold
+        outcomes, by_label, by_method, doc_captions, cases = score_document(
+            doc, config, page_types
         )
-        totals.add(doc_totals)
-        for label, tally in doc_labels.items():
-            by_label[label].add(tally)
-        for page_type, tally in doc_types.items():
-            by_page_type[page_type].add(tally)
-        by_document[stem] = doc_totals
+        totals.update(outcomes)
+        captions.update(doc_captions)
+        by_document[stem] = outcomes
+        for label, counter in by_label.items():
+            label_totals[label].update(counter)
+        for method, counter in by_method.items():
+            method_totals[method].update(counter)
+        for case in cases:
+            page_type_totals[case["page_type"] or "unknown"][case["outcome"]] += 1
         all_cases.extend(cases)
 
+    overall = summarise(totals)
+    if captions["scored"]:
+        # Secondary and approximate — see `caption_figures`. It separates "the
+        # group was formed wrong" from "the group went to the wrong article".
+        overall["caption_figure_accuracy"] = (
+            captions["correct"] / captions["scored"]
+        )
+
     summary = {
-        "overall": totals.as_dict(),
-        "by_label": {k: v.as_dict() for k, v in sorted(by_label.items())},
-        "by_page_type": {k: v.as_dict() for k, v in sorted(by_page_type.items())},
-        "by_document": {k: v.as_dict() for k, v in sorted(by_document.items())},
+        "overall": overall,
+        "by_label": {k: summarise(v) for k, v in sorted(label_totals.items())},
+        "by_method": {k: summarise(v) for k, v in sorted(method_totals.items())},
+        "by_page_type": {k: summarise(v) for k, v in sorted(page_type_totals.items())},
+        "by_document": {k: summarise(v) for k, v in sorted(by_document.items())},
         "documents": len(by_document),
     }
     return summary, all_cases
 
 
 # ---------------------------------------------------------------------------
-# Oracle documents: ground-truth boxes + ground-truth order, linked
+# Page types, for the breakdown
 # ---------------------------------------------------------------------------
 
-def build_ground_documents(
-    ground: dict[str, GroundDoc],
-    pdfs_dir: str | Path | None = None,
-    linker: Optional[Callable[[GlasanaDocument], object]] = None,
-    stems: Optional[Iterable[str]] = None,
-) -> Iterator[GlasanaDocument]:
-    """Assemble one document per stem from the annotations, then link it.
+def load_page_types(coco_path: str | Path | None) -> dict[tuple[str, int], str]:
+    """`{(stem, page_no): page_type}` from a COCO file's `images` list.
 
-    This is `rare.parse.coco.parse_coco` with everything the metric does not
-    need taken out: no page rendering, no figure crops, no HTML/Markdown. Text
-    still comes from `<pdfs_dir>/<stem>.pdf` when it is there, because the
-    splitting and continuation passes read it; without it the geometric passes
-    still run and the numbers are a floor rather than a fair reading.
+    Only the annotated page attribute is wanted here, so the (large)
+    `annotations` array is never touched beyond being parsed.
     """
-    import pdfplumber
-
-    from rare.doc.schema import PageInfo
-    from rare.parse.assemble import assemble_page
-    from rare.parse.text import extract_text_for_page
-
-    pdfs_dir = Path(pdfs_dir) if pdfs_dir else None
-    wanted = set(stems) if stems is not None else None
-
-    for stem in sorted(ground):
-        if wanted is not None and stem not in wanted:
-            continue
-        doc_ground = ground[stem]
-        doc = GlasanaDocument(source_pdf=stem)
-        current_article = None
-
-        pdf_path = pdfs_dir / f"{stem}.pdf" if pdfs_dir else None
-        if pdf_path is not None and not pdf_path.exists():
-            logger.warning(
-                "no PDF at %s; %s is assembled without text, so the linking passes "
-                "that read it contribute nothing", pdf_path, stem,
-            )
-        pdf = pdfplumber.open(pdf_path) if pdf_path and pdf_path.exists() else None
-        try:
-            for page_no in sorted(doc_ground.pages):
-                page = doc_ground.pages[page_no]
-                doc.pages[page_no] = PageInfo(
-                    page_no=page_no,
-                    width=page.width,
-                    height=page.height,
-                    source_file=f"{stem}_{page_no}.jpg",
-                )
-                regions = [
-                    {
-                        "region_id": str(uuid.uuid4()),
-                        "label": r.label,
-                        "bbox_norm_1000": [
-                            r.bbox[0] / page.width * 1000.0,
-                            r.bbox[1] / page.height * 1000.0,
-                            r.bbox[2] / page.width * 1000.0,
-                            r.bbox[3] / page.height * 1000.0,
-                        ],
-                        "score": 1.0,
-                    }
-                    for r in page.regions
-                ]
-                texts = (
-                    extract_text_for_page(pdf, page_no, regions, page.width, page.height)
-                    if pdf is not None and page_no < len(pdf.pages)
-                    else {}
-                )
-                current_article = assemble_page(
-                    doc,
-                    page_no=page_no,
-                    regions=regions,
-                    texts=texts,
-                    img_w=page.width,
-                    img_h=page.height,
-                    figures_dir=Path("."),      # unused: no page image is passed
-                    current_article=current_article,
-                    page_image=None,
-                )
-        finally:
-            if pdf is not None:
-                pdf.close()
-
-        if linker is not None:
-            linker(doc)
-        yield doc
-
-
-def load_documents(docs_dir: str | Path) -> Iterator[GlasanaDocument]:
-    """Every `*_doc.json` under `docs_dir`, as parsed documents.
-
-    Hidden directories are skipped and a stem is taken once: output trees keep
-    superseded runs beside the current one (`.old/`, dated snapshots), and
-    scoring an archived copy of a document a second time would silently double
-    its weight in the aggregate.
-    """
-    seen: set[str] = set()
-    for path in sorted(Path(docs_dir).rglob("*_doc.json")):
-        if any(part.startswith(".") for part in path.parts):
-            continue
-        doc = GlasanaDocument.model_validate_json(path.read_text())
-        stem = Path(doc.source_pdf).stem or doc.source_pdf
-        if stem in seen:
-            logger.warning("document %r already scored; skipping %s", stem, path)
-            continue
-        seen.add(stem)
-        yield doc
+    if coco_path is None:
+        return {}
+    raw = json.loads(Path(coco_path).read_text())
+    types: dict[tuple[str, int], str] = {}
+    for image in raw.get("images", []):
+        page_type = image.get("page_type")
+        if page_type:
+            types[split_stem_page(image["file_name"])] = page_type
+    return types
 
 
 # ---------------------------------------------------------------------------
@@ -651,59 +382,74 @@ def load_documents(docs_dir: str | Path) -> Iterator[GlasanaDocument]:
 # ---------------------------------------------------------------------------
 
 def run_figure_link(
-    coco_path: str | Path,
     run_dir: str | Path,
-    docs_dir: str | Path | None = None,
-    pdfs_dir: str | Path | None = None,
-    linker: Optional[Callable[[GlasanaDocument], object]] = None,
+    docs_dir: str | Path,
+    coco_path: str | Path | None = None,
+    config: dict | LinkConfig | None = None,
+    variants: Optional[Iterable[str]] = None,
     limit: Optional[int] = None,
-    iou_threshold: float = 0.5,
-    cross_page_anchor: bool = True,
     dataset_name: str = "",
 ) -> dict:
-    """Score figure/caption → article attachment and write the results.
+    """Score figure → article placement for every variant, and write the results.
 
-    With `docs_dir` the already-parsed documents under it are scored (end to
-    end: detection, order and linking all count). Without it, documents are
-    built from the ground-truth layout and order and linked with `linker`,
-    isolating `rare.link`.
-
-    Writes `attachment_summary.json`, `attachment_cases.jsonl` (one row per
-    annotated visual) and the shared `report.md`/`scores.csv` into `run_dir`.
+    Each variant gets its own copy of every document, because scoring mutates
+    it. Writes `attachment_summary.json`, `attachment_cases.jsonl` (one row per
+    visual, from the `full` variant) and the shared `report.md`/`scores.csv`.
     """
     from rare.evaluate.report import write_report
 
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    ground = load_ground(coco_path, cross_page_anchor=cross_page_anchor)
+    base = config if isinstance(config, LinkConfig) else LinkConfig.from_dict(config)
+    names = list(variants) if variants else list(VARIANTS)
+    unknown = [n for n in names if n not in VARIANTS]
+    if unknown:
+        raise ValueError(
+            f"unknown variant(s) {unknown}; choose from {sorted(VARIANTS)}"
+        )
 
-    if docs_dir is not None:
-        docs: Iterable[GlasanaDocument] = load_documents(docs_dir)
-        source = str(docs_dir)
-    else:
-        stems = sorted(ground)[:limit] if limit else None
-        docs = build_ground_documents(ground, pdfs_dir=pdfs_dir, linker=linker, stems=stems)
-        source = "ground-truth layout"
+    page_types = load_page_types(coco_path)
+    loaded = list(load_documents(docs_dir))
+    if limit:
+        loaded = loaded[:limit]
+    if not loaded:
+        raise ValueError(f"no *_doc.json documents found under {docs_dir}")
 
-    if limit and docs_dir is not None:
-        docs = list(docs)[:limit]
+    summaries: dict[str, dict] = {}
+    cases: list[dict] = []
 
-    summary, cases = evaluate_documents(docs, ground, iou_threshold=iou_threshold)
-    summary["source"] = source
-    summary["iou_threshold"] = iou_threshold
-    summary["cross_page_anchor"] = cross_page_anchor
+    for name in names:
+        variant_config = replace(base, **VARIANTS[name])
+        # Scoring mutates a document, so each variant works on its own copy.
+        copies = (doc.model_copy(deep=True) for doc in loaded)
+        summary, variant_cases = evaluate_documents(copies, variant_config, page_types)
+        summaries[name] = summary
+        if name == names[0]:
+            cases = variant_cases
+        logger.info(
+            "variant %s: accuracy %.4f over %d visuals",
+            name, summary["overall"]["accuracy"], summary["overall"]["visuals"],
+        )
 
-    (run_dir / "attachment_summary.json").write_text(json.dumps(summary, indent=2))
+    headline = summaries[names[0]]
+    result = {
+        **headline,
+        "source": str(docs_dir),
+        "variants": {name: summaries[name]["overall"] for name in names},
+        "variant_detail": summaries,
+    }
+
+    (run_dir / "attachment_summary.json").write_text(json.dumps(result, indent=2))
     with open(run_dir / "attachment_cases.jsonl", "w") as fh:
         for case in cases:
-            fh.write(json.dumps(case) + "\n")
+            fh.write(json.dumps(case, ensure_ascii=False) + "\n")
 
     write_report(
         run_dir,
         track="figure-link",
-        dataset_name=dataset_name or Path(coco_path).stem,
-        aggregates={source: summary["overall"]},
+        dataset_name=dataset_name or Path(docs_dir).name,
+        aggregates={name: summaries[name]["overall"] for name in names},
         per_image_rows=cases,
     )
-    return summary
+    return result

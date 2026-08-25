@@ -308,9 +308,8 @@ def _resolve_annotations(args: argparse.Namespace) -> Path | None:
     if getattr(args, "annotations", None):
         path = Path(args.annotations)
         return path if path.exists() else None
-    for candidate in ("annotations_with_order.json", "annotations.json"):
-        if (root / candidate).exists():
-            return root / candidate
+    if (root / "annotations.json").exists():
+        return root / "annotations.json"
     return None
 
 
@@ -346,32 +345,44 @@ def _evaluate_page_genre(args: argparse.Namespace) -> int:
 
 
 def _evaluate_figure_link(args: argparse.Namespace) -> int:
-    """`--track figure-link`: figure/caption → article attachment (see rare.evaluate.figure_link)."""
+    """`--track figure-link`: figure → article placement (see rare.evaluate.figure_link).
+
+    Currently scores parsed documents rather than building them.
+    """
     from rare.evaluate.figure_link import run_figure_link
 
-    root = Path(args.data_root or f"datasets/{args.dataset}")
-    coco_path = _resolve_annotations(args)
-    if coco_path is None:
-        print(f"error: no COCO annotations found under {root}.", file=sys.stderr)
+    docs_dir = Path(args.docs_dir or "outputs/parsed/gt")
+    if not docs_dir.exists():
+        print(f"error: no parsed documents at {docs_dir}. Build them with\n"
+              f"  rare parse --coco <annotations.json> --output outputs/parsed/gt",
+              file=sys.stderr)
         return 2
 
-    pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else root / "pdfs"
+    # Optional: only the annotated `page_type` is read, for the breakdown.
+    coco_path = _resolve_annotations(args)
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = Path(args.output) / run_id
 
-    summary = run_figure_link(
-        coco_path,
-        run_dir,
-        docs_dir=args.docs_dir,
-        pdfs_dir=pdfs_dir if pdfs_dir.exists() else None,
-        linker=(lambda doc: _link(doc, args)) if not args.docs_dir else None,
-        limit=args.limit,
-        iou_threshold=args.iou,
-        cross_page_anchor=args.cross_page_anchor,
-        dataset_name=args.dataset,
-    )
+    try:
+        summary = run_figure_link(
+            run_dir,
+            docs_dir,
+            coco_path=coco_path,
+            config=_read_config(getattr(args, "link_config", None)),
+            variants=[v for v in (args.variants or "").split(",") if v] or None,
+            limit=args.limit,
+            dataset_name=args.dataset,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
     print(f"\nAggregates: {json.dumps(summary['overall'], indent=2)}")
-    print(f"Report: {run_dir / 'report.md'}")
+    print("\nBy variant:")
+    for name, scores in summary["variants"].items():
+        print(f"  {name:<10} accuracy {scores['accuracy']:.4f}"
+              f"  (coverage {scores['coverage']:.3f})")
+    print(f"\nReport: {run_dir / 'report.md'}")
     return 0
 
 
@@ -769,29 +780,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument(
         "--docs-dir",
         help="figure-link/page-genre tracks: score the `*_doc.json` files under this "
-             "directory (end to end). Omit to build documents from the ground-truth "
-             "layout and reading order instead, which scores the linking passes alone.",
+             "directory. figure-link requires them and defaults to outputs/parsed/gt; "
+             "page-genre scores them end to end, and omitting it there builds "
+             "documents from the ground-truth layout and order instead.",
+    )
+    p_eval.add_argument(
+        "--variants",
+        help="figure-link track: comma-separated config variants to score side by "
+             "side (default: full,geometry,ner,nearest — see "
+             "rare.evaluate.figure_link.VARIANTS).",
     )
     p_eval.add_argument(
         "--page-type-map",
         help="page-genre track: JSON file of {page_type: genre | [genres] | null} "
              "merged over the built-in map; null leaves that page type out of the "
              "score (see rare.evaluate.page_genre.PAGE_TYPE_TO_GENRE).",
-    )
-    p_eval.add_argument(
-        "--iou",
-        type=float,
-        default=0.5,
-        help="figure-link track: IoU threshold for matching items to annotations "
-             "(default: 0.5).",
-    )
-    p_eval.add_argument(
-        "--no-cross-page-anchor",
-        dest="cross_page_anchor",
-        action="store_false",
-        default=True,
-        help="figure-link track: do not anchor a page-opening visual to the last "
-             "block of the previous page; report it as unanchored instead.",
     )
     p_eval.add_argument(
         "--ner",
