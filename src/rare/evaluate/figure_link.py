@@ -1,23 +1,3 @@
-"""Where does a figure go when nobody has told it? — figure → article scoring.
-
-The annotations never say which article a photo belongs to. What they do say is
-the reading order of every region on a page, and in that order a Figure,
-Caption or FigByline sits with the piece it illustrates. Parsing the COCO
-ground truth with that order as the base therefore already yields the answer:
-`assemble_page` hands every region the article that was open at its `order_id`,
-so a visual's article is the one whose text it interrupts.
-
-This module takes that document and **holds the visuals out of it**. Every
-Figure, Caption and FigByline is stripped of its article and its caption
-pairing; the article partition of everything else is left exactly as the ground
-truth has it. Then the two linking passes that place visuals are re-run:
-
-    figure_matching.link_captions   caption / photo credit -> figure
-    figure_link.link_figures        that group -> the article it illustrates
-
-and each visual is scored on whether it came back to the article it started in.
-"""
-
 from __future__ import annotations
 
 import json
@@ -30,7 +10,6 @@ from typing import Iterable, Optional
 from rare.doc.schema import (
     CaptionItem,
     FigBylineItem,
-    FigureItem,
     GlasanaDocument,
 )
 from rare.evaluate.ground import load_documents, split_stem_page
@@ -110,25 +89,6 @@ def ground_articles(doc: GlasanaDocument) -> dict[str, tuple[bool, Optional[str]
         else:
             anchor = item
     return truth
-
-
-def caption_figures(doc: GlasanaDocument) -> dict[str, Optional[str]]:
-    """`{caption/byline item_id: figure item_id}` by reading-order adjacency.
-
-    The nearest Figure before it on the same page, which is where a caption is
-    annotated. Approximate — a caption set above its figure is scored wrong
-    here — so the number it feeds is reported as a secondary reading only.
-    """
-    pairs: dict[str, Optional[str]] = {}
-    last_figure: dict[int, str] = {}
-
-    for item in doc.iter_body():
-        page_no = item.provenance.page_no
-        if isinstance(item, FigureItem):
-            last_figure[page_no] = item.item_id
-        elif isinstance(item, (CaptionItem, FigBylineItem)):
-            pairs[item.item_id] = last_figure.get(page_no)
-    return pairs
 
 
 # ---------------------------------------------------------------------------
@@ -230,16 +190,15 @@ def score_document(
     doc: GlasanaDocument,
     config: LinkConfig,
     page_types: Optional[dict[tuple[str, int], str]] = None,
-) -> tuple[Counter, dict[str, Counter], dict[str, Counter], Counter, list[dict]]:
+) -> tuple[Counter, dict[str, Counter], dict[str, Counter], list[dict]]:
     """Hold the visuals out of one document, put them back, and score the result.
 
     `doc` is mutated. Returns the outcome counts, the same split by label and
-    by method, the caption→figure tally, and one row per visual.
+    by method, and one row per visual.
     """
     stem = Path(doc.source_pdf).stem or doc.source_pdf
 
     truth = ground_articles(doc)
-    caption_truth = caption_figures(doc)
     # An article the hold-out empties has no items left to be found by.
     non_visual_members = {
         item.article_id
@@ -253,7 +212,6 @@ def score_document(
     outcomes: Counter = Counter()
     by_label: dict[str, Counter] = defaultdict(Counter)
     by_method: dict[str, Counter] = defaultdict(Counter)
-    captions: Counter = Counter()
     cases: list[dict] = []
 
     def title_of(article_id: Optional[str]) -> str:
@@ -297,14 +255,7 @@ def score_document(
             "bbox": list(box_of(item)),
         })
 
-    for item_id, expected_figure in caption_truth.items():
-        if expected_figure is None:
-            continue
-        actual_figure = doc.items[item_id].figure_id
-        captions["scored"] += 1
-        captions["correct"] += int(actual_figure == expected_figure)
-
-    return outcomes, by_label, by_method, captions, cases
+    return outcomes, by_label, by_method, cases
 
 
 def evaluate_documents(
@@ -318,16 +269,14 @@ def evaluate_documents(
     method_totals: dict[str, Counter] = defaultdict(Counter)
     page_type_totals: dict[str, Counter] = defaultdict(Counter)
     by_document: dict[str, Counter] = {}
-    captions: Counter = Counter()
     all_cases: list[dict] = []
 
     for doc in docs:
         stem = Path(doc.source_pdf).stem or doc.source_pdf
-        outcomes, by_label, by_method, doc_captions, cases = score_document(
+        outcomes, by_label, by_method, cases = score_document(
             doc, config, page_types
         )
         totals.update(outcomes)
-        captions.update(doc_captions)
         by_document[stem] = outcomes
         for label, counter in by_label.items():
             label_totals[label].update(counter)
@@ -338,12 +287,6 @@ def evaluate_documents(
         all_cases.extend(cases)
 
     overall = summarise(totals)
-    if captions["scored"]:
-        # Secondary and approximate — see `caption_figures`. It separates "the
-        # group was formed wrong" from "the group went to the wrong article".
-        overall["caption_figure_accuracy"] = (
-            captions["correct"] / captions["scored"]
-        )
 
     summary = {
         "overall": overall,
