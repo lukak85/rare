@@ -12,6 +12,19 @@ from pathlib import Path
 from rare.models.registry import ensure_layoutparser_backend, get, list_backends
 
 
+ALL_TEXT_LABELS = ",".join((
+    "Header", "Footer", "PageNum", "Section", "Dateline", "EditNote",
+    "MarginNote",
+    "Headline", "Kicker", "Deck", "Subhead", "Subsubhead", "Author", "Byline",
+    "Translator",
+    "Paragraph", "Quote", "Dropcap",
+    "Caption", "FigByline",
+    "Table", "OrderedList", "UnorderedList",
+    "Footnote", "TOC", "Literary", "Literature",
+    "Question",
+))
+
+
 def _read_config(path: str | None) -> dict | None:
     if path is None:
         return None
@@ -137,6 +150,90 @@ def _make_ocr(args: argparse.Namespace):
     return BestOfOCR(built)
 
 
+def _add_ocr_flags(parser: argparse.ArgumentParser) -> None:
+    """The OCR fallback's flags, shared by `parse` and `evaluate`.
+
+    Identical on both so a parse run and the evaluation of that same
+    configuration are spelt the same way. On the evaluate side they apply to
+    the predicted text only — see `rare.evaluate.pdf_text`.
+    """
+    parser.add_argument(
+        "--ocr",
+        default="",
+        metavar="BACKEND[,BACKEND]",
+        help="Re-read regions the PDF's text layer left empty by OCR'ing the "
+             "rendered page (see rare.parse.ocr). One of tesseract, ppocr, or "
+             "both comma-separated — the two fail in opposite directions on "
+             "letterspaced display type, and naming both reads every region "
+             "with each and keeps the better answer. Off by default.",
+    )
+    parser.add_argument(
+        "--ocr-labels",
+        default=ALL_TEXT_LABELS,
+        metavar="LABELS",
+        help="Comma-separated labels the OCR fallback may fill. Defaults to "
+             "every text-bearing region in the annotation scheme; pass a "
+             "shorter list (e.g. Header,Kicker) to narrow it.",
+    )
+    parser.add_argument(
+        "--ocr-retry",
+        nargs="?",
+        const="junk,sparse,alien,empty",
+        default="",
+        metavar="REASONS",
+        help="Also re-read regions whose text is present but looks broken, as "
+             "scored by rare.parse.quality: junk (tokens that are not words, "
+             "e.g. the headline 'W Z7'), sparse (far less text than a box that "
+             "shape holds), alien (characters outside the Slovene alphabet). "
+             "Bare --ocr-retry means all three. Off by default, in which case "
+             "only empty regions are filled. Replacing existing text needs "
+             "--ocr-min-replace-confidence and a reading that scores clean, so "
+             "one bad reading is never swapped for another.",
+    )
+    parser.add_argument(
+        "--ocr-min-replace-confidence",
+        type=float,
+        default=60.0,
+        help="Confidence an OCR reading needs before it may overwrite text the "
+             "PDF already carried (default: 60, above --ocr-min-confidence on "
+             "purpose).",
+    )
+    parser.add_argument(
+        "--ocr-rec-model",
+        default="latin_PP-OCRv5_mobile_rec",
+        help="Recognition model for --ocr ppocr (default: "
+             "latin_PP-OCRv5_mobile_rec, the Latin-script multilingual head). "
+             "The Chinese/English heads have no č/š/ž in their dictionary and "
+             "transliterate them away silently.",
+    )
+    parser.add_argument(
+        "--ocr-fill-outlines",
+        action="store_true",
+        help="For --ocr ppocr: solidify hollow letterforms before recognition. "
+             "Display headlines here are sometimes set in an outline face, "
+             "where only the contour is inked and every recogniser sees rings. "
+             "Off by default — it trades one error for another on filled type.",
+    )
+    parser.add_argument(
+        "--ocr-lang",
+        default="slv",
+        help="Tesseract language for --ocr (default: slv). Fails if not installed.",
+    )
+    parser.add_argument(
+        "--ocr-dpi",
+        type=int,
+        default=400,
+        help="DPI the OCR crops are rendered at (default: 400, above --dpi on "
+             "purpose: 200 is marginal for Tesseract on these scans).",
+    )
+    parser.add_argument(
+        "--ocr-min-confidence",
+        type=float,
+        default=40.0,
+        help="Discard OCR readings below this mean word confidence (default: 40).",
+    )
+
+
 def _ocr_labels(args: argparse.Namespace) -> list[str]:
     return [label.strip() for label in args.ocr_labels.split(",") if label.strip()]
 
@@ -155,6 +252,15 @@ def _ocr_retry(args: argparse.Namespace) -> list[str]:
         raise SystemExit(
             f"error: unknown --ocr-retry reason(s): {', '.join(sorted(unknown))} "
             f"(choose from {', '.join(r for r in REASONS if r != 'empty')})"
+        )
+    # --ocr-retry only widens which regions the OCR fallback is offered; with no
+    # backend there is nothing to offer them to, and the run would otherwise
+    # finish looking like the flag had worked.
+    if reasons and not [b for b in getattr(args, "ocr", "").split(",") if b.strip()]:
+        raise SystemExit(
+            "error: --ocr-retry needs a backend. It widens which regions get "
+            "re-read; --ocr chooses what re-reads them. Add --ocr tesseract "
+            "(or ppocr, or tesseract,ppocr)."
         )
     return reasons
 
@@ -443,6 +549,18 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             pdf_root=_resolve_pdfs_dir(pdfs_dir, dataset),
         )
 
+        # --omnidocbench-eval only *selects* between passes that
+        # --run-omnidocbench turns on. Naming one without it is how you get a
+        # run with no prediction markdown and no explanation of why.
+        if args.omnidocbench_eval and not args.run_omnidocbench:
+            print(
+                f"error: --omnidocbench-eval {args.omnidocbench_eval} does "
+                f"nothing without --run-omnidocbench, which is what turns the "
+                f"OmniDocBench passes on. Add it, or drop this flag.",
+                file=sys.stderr,
+            )
+            return 2
+
         emit_omnidocbench = args.emit_omnidocbench
         agg = run_pipeline(
             dataset, layout, order, run_dir,
@@ -453,7 +571,12 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             pdfs_dir=pdfs_dir,
             run_omnidocbench=args.run_omnidocbench,
             omnidocbench_image=args.omnidocbench_image,
-            omnidocbench_ground=args.omnidocbench_ground
+            omnidocbench_layout_image=args.omnidocbench_layout_image,
+            omnidocbench_ground=args.omnidocbench_ground,
+            omnidocbench_eval=args.omnidocbench_eval or "both",
+            ocr=_make_ocr(args),
+            ocr_labels=_ocr_labels(args),
+            ocr_retry=_ocr_retry(args),
         )
 
     elif args.track == "vlm":
@@ -593,78 +716,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output root directory (default: outputs/parsed).",
     )
     p_parse.add_argument("--dpi", type=int, default=200, help="Render DPI (default: 200).")
-    p_parse.add_argument(
-        "--ocr",
-        default="",
-        metavar="BACKEND[,BACKEND]",
-        help="Re-read regions the PDF's text layer left empty by OCR'ing the "
-             "rendered page (see rare.parse.ocr). One of tesseract, ppocr, or "
-             "both comma-separated — the two fail in opposite directions on "
-             "letterspaced display type, and naming both reads every region "
-             "with each and keeps the better answer. Off by default.",
-    )
-    p_parse.add_argument(
-        "--ocr-labels",
-        default="Header",
-        help="Comma-separated labels the OCR fallback may fill (default: Header).",
-    )
-    p_parse.add_argument(
-        "--ocr-retry",
-        nargs="?",
-        const="junk,sparse,alien",
-        default="",
-        metavar="REASONS",
-        help="Also re-read regions whose text is present but looks broken, as "
-             "scored by rare.parse.quality: junk (tokens that are not words, "
-             "e.g. the headline 'W Z7'), sparse (far less text than a box that "
-             "shape holds), alien (characters outside the Slovene alphabet). "
-             "Bare --ocr-retry means all three. Off by default, in which case "
-             "only empty regions are filled. Replacing existing text needs "
-             "--ocr-min-replace-confidence and a reading that scores clean, so "
-             "one bad reading is never swapped for another.",
-    )
-    p_parse.add_argument(
-        "--ocr-min-replace-confidence",
-        type=float,
-        default=60.0,
-        help="Confidence an OCR reading needs before it may overwrite text the "
-             "PDF already carried (default: 60, above --ocr-min-confidence on "
-             "purpose).",
-    )
-    p_parse.add_argument(
-        "--ocr-rec-model",
-        default="latin_PP-OCRv5_mobile_rec",
-        help="Recognition model for --ocr ppocr (default: "
-             "latin_PP-OCRv5_mobile_rec, the Latin-script multilingual head). "
-             "The Chinese/English heads have no č/š/ž in their dictionary and "
-             "transliterate them away silently.",
-    )
-    p_parse.add_argument(
-        "--ocr-fill-outlines",
-        action="store_true",
-        help="For --ocr ppocr: solidify hollow letterforms before recognition. "
-             "Display headlines here are sometimes set in an outline face, "
-             "where only the contour is inked and every recogniser sees rings. "
-             "Off by default — it trades one error for another on filled type.",
-    )
-    p_parse.add_argument(
-        "--ocr-lang",
-        default="slv",
-        help="Tesseract language for --ocr (default: slv). Fails if not installed.",
-    )
-    p_parse.add_argument(
-        "--ocr-dpi",
-        type=int,
-        default=400,
-        help="DPI the OCR crops are rendered at (default: 400, above --dpi on "
-             "purpose: 200 is marginal for Tesseract on these scans).",
-    )
-    p_parse.add_argument(
-        "--ocr-min-confidence",
-        type=float,
-        default=40.0,
-        help="Discard OCR readings below this mean word confidence (default: 40).",
-    )
+    _add_ocr_flags(p_parse)
     p_parse.add_argument(
         "--list-models",
         action="store_true",
@@ -722,6 +774,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="outputs/evaluations",
         help="Output root (default: outputs/evaluations).",
     )
+    # Pipeline track: re-read the regions the text layer failed on before the
+    # predicted markdown is scored. Predictions only — see `rare.evaluate.pdf_text`.
+    _add_ocr_flags(p_eval)
     p_eval.add_argument("--limit", type=int, help="Cap number of samples (for smoke tests).")
     p_eval.add_argument("--start", type=int, help="Start index for evaluating samples.")
     p_eval.add_argument(
@@ -761,8 +816,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_eval.add_argument(
         "--omnidocbench-image",
-        help="Override the OmniDocBench Docker image used by --run-omnidocbench "
+        help="Override the OmniDocBench Docker image used for the end2end pass "
              "(default: the pinned repro image).",
+    )
+    p_eval.add_argument(
+        "--omnidocbench-layout-image",
+        help="Override the OmniDocBench Docker image used for the detection pass "
+             "(default: the pinned layout image). The two passes ship in different "
+             "images, so they are configured separately.",
+    )
+    p_eval.add_argument(
+        "--omnidocbench-eval",
+        choices=["detection", "end2end", "both"],
+        default=None,
+        help="Pipeline-track: which OmniDocBench pass(es) --run-omnidocbench runs. "
+             "'detection' scores boxes (COCODet mAP); 'end2end' scores the rendered "
+             "per-page Markdown (text_block/reading_order Edit_dist), the same way the "
+             "VLM track is scored, and needs a resolvable --pdfs-dir for real text. "
+             "Default: both.",
     )
     p_eval.add_argument(
         "--list-models",

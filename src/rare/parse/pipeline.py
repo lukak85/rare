@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pdfplumber
 
-from rare.doc.renderers import to_markdown
 from rare.doc.schema import (
     Article,
     GlasanaDocument,
     PageInfo,
-    relabel_to_glasbena_mladina,
 )
 from rare.parse.assemble import assemble_page
 from rare.parse.io import write_outputs
 from rare.parse.merge import merge_flowing_paragraphs
 from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_failed_regions
+from rare.parse.odb import regions_from_layout, write_omnidocbench_page
 from rare.parse.pdf import render_pages
 from rare.parse.text import extract_text_for_page
 from rare.utils.conversionutils import layout_parser_to_coco
@@ -26,17 +24,6 @@ from rare.utils.fileutils import save_coco_to_json
 
 if TYPE_CHECKING:
     from rare.models.base import LayoutBackend, ReadingOrderBackend
-
-
-def _bbox_to_norm_1000(block, img_w: int, img_h: int) -> list[float]:
-    """Convert an lp.TextBlock (pixel coords) to [x0,y0,x1,y1] in 0-1000 space."""
-    x1, y1, x2, y2 = block.coordinates
-    return [
-        x1 / img_w * 1000.0,
-        y1 / img_h * 1000.0,
-        x2 / img_w * 1000.0,
-        y2 / img_h * 1000.0,
-    ]
 
 
 def parse_pdf(
@@ -138,15 +125,9 @@ def parse_pdf(
                 ))
 
             # Build regions dicts in reading order
-            regions: list[dict] = []
-            for idx in order_indices:
-                block = detected_layout[idx]
-                regions.append({
-                    "region_id": str(uuid.uuid4()),
-                    "label": relabel_to_glasbena_mladina(block.type or "Paragraph", source_taxonomy),
-                    "bbox_norm_1000": _bbox_to_norm_1000(block, img_w, img_h),
-                    "score": getattr(block, "score", None),
-                })
+            regions = regions_from_layout(
+                detected_layout, order_indices, img_w, img_h, source_taxonomy,
+            )
 
             texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
 
@@ -167,9 +148,9 @@ def parse_pdf(
             # OmniDocBench scores the detector's own segmentation, so this
             # export is taken before the paragraph merge below.
             if emit_omnidocbench:
-                _write_omnidocbench_page(
+                write_omnidocbench_page(
                     out_dir / "omnidocbench",
-                    pdf_stem=pdf_stem,
+                    out_stem=f"{pdf_stem}_{page_no}",
                     page_no=page_no,
                     regions=regions,
                     texts=texts,
@@ -201,47 +182,6 @@ def parse_pdf(
         linker(doc)
 
     return write_outputs(doc, output_dir, per_page=per_page)
-
-
-def _write_omnidocbench_page(
-    odb_dir: Path,
-    pdf_stem: str,
-    page_no: int,
-    regions: list[dict],
-    texts: dict[str, str],
-    img_w: int,
-    img_h: int,
-) -> Path:
-    """Render one page's regions to `<odb_dir>/{pdf_stem}_{page_no}.md`.
-
-    Assembles a throw-away single-page document so the markdown goes through
-    the same renderer the VLM track is scored with. `page_image` is left None:
-    figure crops already belong to the main output and are not re-written here
-    (figures render as an image with an empty src, which the evaluator's
-    markdown parser drops).
-    """
-    page_doc = GlasanaDocument(source_pdf=pdf_stem)
-    page_doc.pages[page_no] = PageInfo(
-        page_no=page_no,
-        width=img_w,
-        height=img_h,
-        source_file=f"{pdf_stem}_{page_no}.jpg",
-    )
-    assemble_page(
-        page_doc,
-        page_no=page_no,
-        regions=regions,
-        texts=texts,
-        img_w=img_w,
-        img_h=img_h,
-        figures_dir=odb_dir,
-        current_article=None,
-    )
-
-    odb_dir.mkdir(parents=True, exist_ok=True)
-    md_path = odb_dir / f"{pdf_stem}_{page_no}.md"
-    md_path.write_text(to_markdown(page_doc))
-    return md_path
 
 
 def _join_coco_pages(pages: list[dict]) -> dict:

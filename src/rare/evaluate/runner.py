@@ -28,12 +28,11 @@ from rare.evaluate.vlm_eval import aggregate as vlm_aggregate, score_text
 from rare.evaluate.omnidocbench import (
     DEFAULT_PAGE_ATTRIBUTE_FIELDS,
     coco_to_omnidocbench,
-    emit_stub_markdown,
     merge_prediction_pages,
-    relabel_predictions_to_gt,
     _resolve_map,
 )
 from rare.doc.renderers import to_markdown, to_markdown_pages
+from rare.parse.odb import regions_from_layout, write_omnidocbench_page
 from rare.utils.conversionutils import layout_parser_to_coco
 from rare.utils.fileutils import save_coco_to_json
 
@@ -98,13 +97,26 @@ def run_pipeline(
     pdfs_dir: Optional[Path] = None,
     run_omnidocbench: bool = False,
     omnidocbench_image: Optional[str] = None,
+    omnidocbench_layout_image: Optional[str] = None,
     omnidocbench_ground: Optional[Path] = None,
+    omnidocbench_eval: str = "both",
+    ocr=None,
+    ocr_labels: Optional[Iterable[str]] = None,
+    ocr_retry: Optional[Iterable[str]] = None,
 ) -> dict:
     """Run one (layout, order) combo over `dataset`, write per-model results.
 
+    Local metrics (mAP, Kendall tau) are always computed. With
+    `run_omnidocbench`, the OmniDocBench container is additionally run and its
+    numbers merged on top; `omnidocbench_eval` selects which pass(es):
+
+      - `detection` — COCODet mAP over `<run_dir>/omnidocbench_layout/<model>_odb.json`.
+      - `end2end`   — `text_block` / `reading_order` Edit_dist over per-page
+        markdown, the same scoring the VLM track gets.
+      - `both`      — both of the above (default).
+
     When `emit_omnidocbench` is true, also writes:
       - `<run_dir>/omnidocbench/gt.json` — one OmniDocBench page list.
-      - `<run_dir>/omnidocbench/<model>_pred.json` — same shape, predictions.
       - `<run_dir>/omnidocbench/markdown_pred_<model>/<image_stem>.md` — one
         markdown file per page in predicted reading order; this is what
         `scripts/omnidocbench/run.sh` mounts at `data_md/predictions`.
@@ -119,12 +131,33 @@ def run_pipeline(
         IoU-matched GT tokens or `__UNMATCHED_<id>__` on predictions). This
         still unblocks OmniDocBench but only measures box ordering.
 
+    `ocr`, when given, re-reads the regions the text layer failed on before the
+    predicted markdown is written — the same `rare.parse.ocr` pass the parse
+    pipeline runs, with the same `ocr_labels` / `ocr_retry` gates. It applies to
+    the *predictions only*; the ground truth keeps whatever text the corpus
+    carries, so the end2end Edit_dist actually moves with the OCR pass instead
+    of comparing it against itself. Run the same models twice, with and without
+    `--ocr`, to read its effect off the report.
+
     `category_map` is an optional override merged on top of
     `omnidocbench.DEFAULT_CATEGORY_MAP`.
     """
     model_name = f"{layout.name}__{order.name}"
     per_image: list[dict] = []
     coco_predictions: list[dict] = []
+    aggregates: dict = {}
+
+    want_detection = run_omnidocbench and omnidocbench_eval in ("detection", "both")
+    want_end2end = run_omnidocbench and omnidocbench_eval in ("end2end", "both")
+
+    # End2end scores text, so it needs real per-region text on *both* sides.
+    # Stub tokens (`__B<anno_id>__`) would make Edit_dist meaningless, so skip
+    # that pass rather than report a fictional number. Detection is unaffected.
+    pdf_root = _resolve_pdfs_dir(pdfs_dir, dataset)
+    if want_end2end and pdf_root is None:
+        print("[omnidocbench] pipeline end2end needs a resolvable --pdfs-dir to "
+              "fill predicted regions with real text; skipping the end2end pass.")
+        want_end2end = False
 
     # Category-aware mAP needs both taxonomies translated into the shared
     # OmniDocBench space. GT (source COCO names) is resolved via the same map the
@@ -140,6 +173,109 @@ def run_pipeline(
     if limit:
         samples = samples[:limit]
 
+    from rare.evaluate.pdf_text import PdfTextSource
+
+    odb_dir = run_dir / "omnidocbench"
+    markdown_dir: Optional[Path] = None
+    if want_end2end:
+        markdown_dir = odb_dir / f"markdown_pred_{model_name}"
+        markdown_dir.mkdir(parents=True, exist_ok=True)
+
+    # One source for both the predicted markdown below and the GT text further
+    # down, so quick_match sees consistently tokenised text on both sides.
+    pdf_text_source = (
+        PdfTextSource(
+            pdf_root,
+            ocr=ocr,
+            ocr_labels=ocr_labels or (),
+            ocr_retry=ocr_retry or (),
+        )
+        if pdf_root is not None else None
+    )
+    if ocr is not None and pdf_text_source is None:
+        print("[ocr] no resolvable --pdfs-dir, so there is no text layer to "
+              "re-read; the OCR pass is skipped.")
+    try:
+        _run_pipeline_samples(
+            samples=samples,
+            layout=layout,
+            order=order,
+            model_name=model_name,
+            pdfs_dir=pdfs_dir,
+            per_image=per_image,
+            coco_predictions=coco_predictions,
+            save_coco=save_coco,
+            gt_category_map=gt_category_map,
+            pred_category_map=pred_category_map,
+            markdown_dir=markdown_dir,
+            pdf_text_source=pdf_text_source,
+        )
+
+        if save_coco and coco_predictions:
+            _save_pipeline_coco(run_dir, model_name, samples, coco_predictions)
+
+        aggregates.update(pipeline_aggregate(per_image))
+        aggregates.update(_run_pipeline_omnidocbench(
+            dataset=dataset,
+            run_dir=run_dir,
+            odb_dir=odb_dir,
+            model_name=model_name,
+            emit_omnidocbench=emit_omnidocbench,
+            want_detection=want_detection,
+            want_end2end=want_end2end,
+            markdown_dir=markdown_dir,
+            coco_predictions=coco_predictions,
+            category_map=category_map,
+            gt_category_map=gt_category_map,
+            pred_category_map=pred_category_map,
+            layout_label_map=layout.label_map,
+            pdf_text_source=pdf_text_source,
+            omnidocbench_ground=omnidocbench_ground,
+            omnidocbench_image=omnidocbench_image,
+            omnidocbench_layout_image=omnidocbench_layout_image,
+        ))
+    finally:
+        if pdf_text_source is not None:
+            if pdf_text_source.ocr is not None:
+                aggregates["ocr_regions_filled"] = pdf_text_source.ocr_filled
+                print(f"[ocr] {pdf_text_source.ocr.name} rewrote "
+                      f"{pdf_text_source.ocr_filled} predicted region(s).")
+            pdf_text_source.close()
+
+    _write_per_model(
+        run_dir=run_dir,
+        model_name=model_name,
+        track="pipeline",
+        dataset_name=dataset.name,
+        aggregates=aggregates,
+        per_image=per_image,
+    )
+    _regenerate_report(run_dir, track="pipeline", dataset_name=dataset.name)
+    return aggregates
+
+
+def _run_pipeline_samples(
+    samples,
+    layout,
+    order,
+    model_name: str,
+    pdfs_dir: Optional[Path],
+    per_image: list[dict],
+    coco_predictions: list[dict],
+    save_coco: bool,
+    gt_category_map: Optional[dict[str, str]],
+    pred_category_map: Optional[dict[str, str]],
+    markdown_dir: Optional[Path],
+    pdf_text_source,
+) -> None:
+    """Detect, order and score every page; optionally emit prediction markdown.
+
+    Local metrics are always collected — they cost nothing beyond the detection
+    that has already happened, and having them alongside the container numbers
+    is the point of running both passes.
+    """
+    source_taxonomy = getattr(layout, "source_taxonomy", None)
+
     for sample in tqdm(samples):
         image = _open_image(sample.image_path)
         predicted = layout.detect(sample.image_path)
@@ -152,43 +288,64 @@ def run_pipeline(
             pdf_root=pdfs_dir
         )
 
-        if not run_omnidocbench:
-            row: dict = {
-                "model":         model_name,
-                "image_id":      sample.image_id,
-                "pdf_stem":      sample.pdf_stem,
-                "page_no":       sample.page_no,
-                "file_name":     sample.image_path.name,
-                "predicted_order": list(predicted_order),
-            }
+        row: dict = {
+            "model":         model_name,
+            "image_id":      sample.image_id,
+            "pdf_stem":      sample.pdf_stem,
+            "page_no":       sample.page_no,
+            "file_name":     sample.image_path.name,
+            "predicted_order": list(predicted_order),
+        }
 
-            row.update(score_layout(
-                predicted, sample.ground_layout,
-                pred_category_map=pred_category_map,
+        row.update(score_layout(
+            predicted, sample.ground_layout,
+            pred_category_map=pred_category_map,
+            gt_category_map=gt_category_map,
+        ))
+        if sample.ground_order is not None:
+            row.update(score_order(
+                predicted, predicted_order, sample.ground_layout, sample.ground_order
+            ))
+            # Reading order on GT boxes directly: run the order model over the
+            # ground-truth layout so the score isolates ordering quality from
+            # detection quality (no IoU matching, abandon regions excluded).
+            gt_predicted_order = order.order(
+                sample.ground_layout,
+                image=image,
+                page_no=sample.page_no,
+                pdf_stem=sample.pdf_stem,
+                img_path=sample.image_path,
+                pdf_root=pdfs_dir
+            )
+            # Store both permutations (over the SAME ground-truth boxes) so
+            # the GT-direct reading order can be compared side by side.
+            row.update(score_order_gt(
+                sample.ground_layout, sample.ground_order, gt_predicted_order,
                 gt_category_map=gt_category_map,
             ))
-            if sample.ground_order is not None:
-                row.update(score_order(
-                    predicted, predicted_order, sample.ground_layout, sample.ground_order
-                ))
-                # Reading order on GT boxes directly: run the order model over the
-                # ground-truth layout so the score isolates ordering quality from
-                # detection quality (no IoU matching, abandon regions excluded).
-                gt_predicted_order = order.order(
-                    sample.ground_layout,
-                    image=image,
-                    page_no=sample.page_no,
-                    pdf_stem=sample.pdf_stem,
-                    img_path=sample.image_path,
-                    pdf_root=pdfs_dir
-                )
-                # Store both permutations (over the SAME ground-truth boxes) so
-                # the GT-direct reading order can be compared side by side.
-                row.update(score_order_gt(
-                    sample.ground_layout, sample.ground_order, gt_predicted_order,
-                    gt_category_map=gt_category_map,
-                ))
-            per_image.append(row)
+        per_image.append(row)
+
+        # Prediction markdown for OmniDocBench's `data_md/predictions` mount.
+        # Named after the *ground-truth* page image stem: the end2end loader
+        # resolves predictions as `basename(page_info.image_path)[:-4] + ".md"`,
+        # and `page_info.image_path` is this sample's COCO `file_name`.
+        if markdown_dir is not None and pdf_text_source is not None:
+            regions = regions_from_layout(
+                predicted, predicted_order,
+                sample.width, sample.height, source_taxonomy,
+            )
+            texts = pdf_text_source.texts_for_regions(
+                str(sample.image_path), regions, sample.width, sample.height,
+            )
+            write_omnidocbench_page(
+                markdown_dir,
+                out_stem=sample.image_path.stem,
+                page_no=sample.page_no,
+                regions=regions,
+                texts=texts,
+                img_w=sample.width,
+                img_h=sample.height,
+            )
 
         if save_coco:
             categories = layout.label_map
@@ -203,143 +360,166 @@ def run_pipeline(
                 predicted_order=predicted_order,
             ))
 
-    if not run_omnidocbench:
-        aggregates = pipeline_aggregate(per_image)
 
-    if save_coco and coco_predictions:
-        coco_dir = run_dir / "per_model" / f"{model_name}_coco"
-        coco_dir.mkdir(parents=True, exist_ok=True)
-        for sample, payload in zip(samples, coco_predictions):
-            save_coco_to_json(payload, str(coco_dir / f"{sample.image_id}.json"))
+def _save_pipeline_coco(
+    run_dir: Path, model_name: str, samples, coco_predictions: list[dict]
+) -> None:
+    """Write per-image COCO predictions plus one joined file for the run."""
+    coco_dir = run_dir / "per_model" / f"{model_name}_coco"
+    coco_dir.mkdir(parents=True, exist_ok=True)
+    for sample, payload in zip(samples, coco_predictions):
+        save_coco_to_json(payload, str(coco_dir / f"{sample.image_id}.json"))
 
-        # TODO: do this below nicer (at the moment it's a copy of tools' `join_annotations`
-        # Join annotations in a single COCO file
-        coco_anns_list = []
-        coco_imgs_list = []
-        coco_cats = None
-        annotation_id = 1
+    # TODO: do this below nicer (at the moment it's a copy of tools' `join_annotations`
+    # Join annotations in a single COCO file
+    coco_anns_list = []
+    coco_imgs_list = []
+    coco_cats = None
+    annotation_id = 1
 
-        import os
-        from pycocotools.coco import COCO
+    import os
+    from pycocotools.coco import COCO
 
-        for filename in os.listdir(coco_dir):
-            if not filename.endswith(".json"):
-                continue
+    for filename in os.listdir(coco_dir):
+        if not filename.endswith(".json"):
+            continue
 
-            coco = COCO(os.path.join(coco_dir, filename))
-            coco_anns = coco.loadAnns(coco.getAnnIds())
+        coco = COCO(os.path.join(coco_dir, filename))
+        coco_anns = coco.loadAnns(coco.getAnnIds())
 
-            # Reassign annotation IDs to avoid collisions
-            for ann in coco_anns:
-                ann["id"] = annotation_id
-                annotation_id += 1
+        # Reassign annotation IDs to avoid collisions
+        for ann in coco_anns:
+            ann["id"] = annotation_id
+            annotation_id += 1
 
-            coco_anns_list.extend(coco_anns)
-            coco_imgs_list.extend(coco.loadImgs(coco.getImgIds()))
+        coco_anns_list.extend(coco_anns)
+        coco_imgs_list.extend(coco.loadImgs(coco.getImgIds()))
 
-            if coco_cats is None:
-                coco_cats = coco.cats
+        if coco_cats is None:
+            coco_cats = coco.cats
 
-        coco_joined_data = {
-            "images": coco_imgs_list,
-            "annotations": coco_anns_list,
-            "categories": [coco_cats[cid] for cid in coco_cats],
-        }
+    coco_joined_data = {
+        "images": coco_imgs_list,
+        "annotations": coco_anns_list,
+        "categories": [coco_cats[cid] for cid in coco_cats],
+    }
 
-        save_coco_to_json(coco_joined_data, str(run_dir / "per_model" / f"{model_name}_coco.json"))
+    save_coco_to_json(coco_joined_data, str(run_dir / "per_model" / f"{model_name}_coco.json"))
 
-    gt_path: Optional[Path] = None
-    markdown_dir: Optional[Path] = None
 
-    if emit_omnidocbench:
-        from rare.evaluate.pdf_text import PdfTextSource
+def _run_pipeline_omnidocbench(
+    dataset: EvalDataset,
+    run_dir: Path,
+    odb_dir: Path,
+    model_name: str,
+    emit_omnidocbench: bool,
+    want_detection: bool,
+    want_end2end: bool,
+    markdown_dir: Optional[Path],
+    coco_predictions: list[dict],
+    category_map: Optional[dict[str, str]],
+    gt_category_map: Optional[dict[str, str]],
+    pred_category_map: Optional[dict[str, str]],
+    layout_label_map,
+    pdf_text_source,
+    omnidocbench_ground: Optional[Path],
+    omnidocbench_image: Optional[str],
+    omnidocbench_layout_image: Optional[str],
+) -> dict[str, float]:
+    """Resolve ground truth, then run the requested container pass(es).
 
-        odb_dir = run_dir / "omnidocbench"
-        odb_dir.mkdir(parents=True, exist_ok=True)
+    Returns the merged container metrics, empty when nothing ran. Failures
+    inside `run_eval` already degrade to `{}`, so a missing Docker or a broken
+    container never sinks the local metrics computed above.
+    """
+    if not (want_detection or want_end2end) and not emit_omnidocbench:
+        return {}
 
-        # Pick the text source: real PDF text when a PDF directory resolves,
-        # stub tokens otherwise. The PDF source needs cleanup of file handles,
-        # so own it for the duration of the emit.
-        pdf_text_source = None
-        pdf_root = _resolve_pdfs_dir(pdfs_dir, dataset)
-        if pdf_root is not None:
-            pdf_text_source = PdfTextSource(pdf_root)
-        use_stub = pdf_text_source is None
+    odb_dir.mkdir(parents=True, exist_ok=True)
 
-        omnidocbench_ground, _ = _write_omnidocbench_gt(
+    # Ground truth precedence, deliberately matching the VLM track so both
+    # tracks can be pointed at one identical gt.json and compared directly:
+    # an explicit --omnidocbench-ground wins; otherwise build one from the
+    # dataset (native OmniDocBench JSON, else the COCO annotations).
+    gt_path: Optional[Path] = Path(omnidocbench_ground) if omnidocbench_ground else None
+    if gt_path is not None:
+        print(f"[omnidocbench] ground truth: {gt_path} (explicit)")
+    elif emit_omnidocbench:
+        # `text_stub` only when no PDF text is available; end2end already
+        # refused to run in that case, so stubs can only reach detection.
+        gt_path, _ = _write_omnidocbench_gt(
             dataset, odb_dir, category_map,
-            text_stub=use_stub, text_source=pdf_text_source,
+            text_stub=pdf_text_source is None,
+            text_source=pdf_text_source,
         )
+        print(f"[omnidocbench] ground truth: {gt_path} (built from dataset)")
 
-        """
-        try:
-            gt_path, gt_pages = _write_omnidocbench_gt(
-                dataset, odb_dir, category_map,
-                # text_stub=use_stub, text_source=pdf_text_source,
-            )
-            # Predictions: one combined JSON per model. With real PDF text
-            # each pred box's own crop is queried; the IoU-to-GT relabel is
-            # only needed in stub mode (where tokens must match exactly).
-            if coco_predictions:
-                # pred_pages = merge_prediction_pages(
-                #     coco_predictions, pred_category_map,
-                #     text_stub=use_stub, text_source=pdf_text_source,
-                # )
-                # if use_stub and gt_pages:
-                #     relabel_predictions_to_gt(pred_pages, gt_pages)
-                (odb_dir / f"{model_name}_pred.json").write_text(
-                    json.dumps(pred_pages, indent=2)
-                )
-                # Per-page markdown for OmniDocBench's `data_md/predictions` mount.
-                # markdown_dir = odb_dir / f"markdown_pred_{model_name}"
-                # emit_stub_markdown(pred_pages, markdown_dir) # TODO: currently out of scope for pipeline track
-        finally:
-            if pdf_text_source is not None:
-                pdf_text_source.close()
-        """
+    if gt_path is None:
+        if want_detection or want_end2end:
+            print("[omnidocbench] no ground truth available "
+                  "(pass --omnidocbench-ground or enable --emit-omnidocbench); skipping.")
+        return {}
 
-    # Run OmniDocBench's container against the artifacts
-    if run_omnidocbench and omnidocbench_ground is not None:
-        from rare.evaluate.omnidocbench_docker import run_eval
-
-        # Save prediction to OmniDocBench layout evaluation compliant format
-        odb_dir = run_dir / "omnidocbench_layout"
-        odb_dir.mkdir(parents=True, exist_ok=True)
-
-        # Predictions: one combined JSON per model.
-        if coco_predictions:
-            pred_pages = merge_prediction_pages(
-                coco_predictions,
-                layout.label_map,
-                # text_stub=use_stub
-            )
-            odb_path = odb_dir / f"{model_name}_odb.json"
-            odb_path.write_text(
-                json.dumps(pred_pages, indent=2)
-            )
-
-            odb_metrics = run_eval(
-                gt_path=Path(omnidocbench_ground),
-                pred_path=odb_path,
-                # pred_md_dir=markdown_dir, # TODO: potentially add later for edit distance calculation
-                # result_dir=odb_dir / f"results_{model_name}", # TODO: add back later if needed
-                docker_image=omnidocbench_image,
-                evaluation_type='detection',
-                gt_cat_mapping=_convert_to_string(gt_category_map),
-                pred_cat_mapping=_convert_to_string(pred_category_map)
-            )
-            aggregates = odb_metrics
-
-    _write_per_model(
-        run_dir=run_dir,
-        model_name=model_name,
-        track="pipeline",
-        dataset_name=dataset.name,
-        aggregates=aggregates,
-        per_image=per_image,
+    from rare.evaluate.omnidocbench_docker import (
+        DEFAULT_IMAGE, DEFAULT_LAYOUT_IMAGE, run_eval,
     )
-    _regenerate_report(run_dir, track="pipeline", dataset_name=dataset.name)
-    return aggregates
+
+    metrics: dict[str, float] = {}
+
+    if want_detection:
+        if not coco_predictions:
+            print("[omnidocbench] no COCO predictions (needs --save-coco); "
+                  "skipping the detection pass.")
+        else:
+            layout_odb_dir = run_dir / "omnidocbench_layout"
+            layout_odb_dir.mkdir(parents=True, exist_ok=True)
+            pred_pages = merge_prediction_pages(coco_predictions, layout_label_map)
+            pred_path = layout_odb_dir / f"{model_name}_odb.json"
+            pred_path.write_text(json.dumps(pred_pages, indent=2))
+
+            metrics.update(run_eval(
+                gt_path=gt_path,
+                pred_path=pred_path,
+                docker_image=omnidocbench_layout_image or DEFAULT_LAYOUT_IMAGE,
+                evaluation_type="detection",
+                gt_cat_mapping=_convert_to_string(gt_category_map),
+                pred_cat_mapping=_convert_to_string(pred_category_map),
+            ))
+
+    if want_end2end and markdown_dir is not None:
+        _warn_unmatched_predictions(gt_path, markdown_dir)
+        metrics.update(run_eval(
+            gt_path=gt_path,
+            pred_md_dir=markdown_dir,
+            result_dir=odb_dir / f"results_{model_name}",
+            docker_image=omnidocbench_image or DEFAULT_IMAGE,
+            evaluation_type="end2end",
+        ))
+
+    return metrics
+
+
+def _warn_unmatched_predictions(gt_path: Path, markdown_dir: Path) -> None:
+    """Check every GT page has a prediction file before paying for a container run.
+
+    OmniDocBench resolves predictions as `basename(image_path)[:-4] + ".md"` and
+    only prints a warning per miss, so a systematic naming mismatch would show up
+    as a silently excellent score. Surface it here instead.
+    """
+    try:
+        gt_pages = json.loads(gt_path.read_text())
+    except (OSError, ValueError):
+        return
+    missing = [
+        name for name in (
+            Path(p.get("page_info", {}).get("image_path", "")).stem for p in gt_pages
+        )
+        if name and not (markdown_dir / f"{name}.md").exists()
+    ]
+    if missing:
+        print(f"[omnidocbench] WARNING: {len(missing)}/{len(gt_pages)} ground-truth "
+              f"pages have no prediction markdown in {markdown_dir} "
+              f"(e.g. {missing[:3]}). Those pages are skipped by the evaluator.")
 
 
 # ---------------------------------------------------------------------------

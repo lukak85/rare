@@ -17,6 +17,7 @@ this subprocess for a local install — keep that seam in mind.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -189,6 +190,32 @@ omnidocbench_pred_cat_mapping
     return out
 
 
+# `detection_eval` only *prints* its numbers (see OmniDocBench/task/detection_eval.py:
+# it calls `coco_det_metric` and `print`s the result), so unlike the end2end task
+# there is no result file to mount and read back. Parse the printed line instead.
+_DETECT_LINE = re.compile(r"detect_matrix\s+OrderedDict\((.*)\)\s*$", re.MULTILINE)
+_DETECT_PAIR = re.compile(r"\(\s*'([^']+)'\s*,\s*([^)]+?)\s*\)")
+
+
+def parse_detection_stdout(stdout: str) -> dict[str, float]:
+    """Pull `{metric: value}` out of the detection container's `detect_matrix` line.
+
+    Keys keep OmniDocBench's own `bbox_`-prefixed names (`bbox_mAP`,
+    `bbox_title_precision`, ...) so they never collide with the locally computed
+    `map`/`map_50` from `rare.evaluate.pipeline_eval`. NaN entries — a class with
+    no ground-truth instances — are dropped rather than reported as 0.0.
+    """
+    match = _DETECT_LINE.search(stdout)
+    if not match:
+        return {}
+    out: dict[str, float] = {}
+    for key, raw in _DETECT_PAIR.findall(match.group(1)):
+        val = _as_float(raw)
+        if val is not None:
+            out[key] = val
+    return out
+
+
 def run_eval(
     gt_path: Path,
     pred_path: Path=None,
@@ -224,21 +251,36 @@ def run_eval(
     cmd = _docker_command(gt_path, pred_path, pred_md_dir, result_dir, docker_image, evaluation_type=evaluation_type,
                           gt_cat_mapping=gt_cat_mapping, pred_cat_mapping=pred_cat_mapping)
     print(f"[omnidocbench] running container {docker_image} ...")
+    # The detection pass reports only on stdout, so it has to be captured; the
+    # end2end pass writes a result file and streams instead (its container run is
+    # long enough that live output matters).
+    capture = evaluation_type != "end2end"
     try:
-        proc = subprocess.run(cmd, timeout=timeout)
+        proc = subprocess.run(cmd, timeout=timeout, capture_output=capture, text=capture)
     except (subprocess.TimeoutExpired, OSError) as exc:
         print(f"[omnidocbench] container run failed: {exc}")
         return {}
+    if capture:
+        # Echo it back so the container's own report is not swallowed.
+        print(proc.stdout or "", end="")
+        if proc.stderr:
+            print(proc.stderr, end="")
     if proc.returncode != 0:
         print(f"[omnidocbench] container exited with code {proc.returncode}; "
               f"see output above. Skipping metric merge.")
         return {}
-    """ TODO: add back
+    if capture:
+        metrics = parse_detection_stdout(proc.stdout or "")
+        if not metrics:
+            print("[omnidocbench] no `detect_matrix` line in container output.")
+        else:
+            print(f"[omnidocbench] {metrics}")
+        return metrics
+    if result_dir is None:
+        return {}
     metrics = parse_metric_result(result_dir)
     if not metrics:
         print(f"[omnidocbench] no parseable metrics in {result_dir}.")
     else:
         print(f"[omnidocbench] {metrics}")
     return metrics
-    """
-    return {}

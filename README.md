@@ -175,6 +175,40 @@ PaddleOCR, which is best installed into its own conda environment — it clashes
 pip install -e ".[pp-doclayoutv3]"      # paddleocr[all]
 ```
 
+##### Measuring what it bought (`rare evaluate --ocr`)
+
+The same flags exist on `rare evaluate --track pipeline`, so a configuration can be evaluated exactly as it is parsed.
+There they apply to the **predicted** text only. The ground truth keeps whatever text the corpus carries — one text
+source feeding both sides would compare OCR against itself, and `text_block` Edit_dist would barely move. If the ground
+truth should carry corrected text too, hand it in with `--omnidocbench-ground`; `examples/manual/audit/run.py --apply`
+writes exactly that file.
+
+Run the same models twice, **into two separate run directories**, and compare the reports:
+
+```bash
+rare evaluate --track pipeline --dataset glasbena_mladina --layout doclayout-yolo \
+    --run-omnidocbench --omnidocbench-eval end2end --run-id base
+rare evaluate --track pipeline --dataset glasbena_mladina --layout doclayout-yolo \
+    --run-omnidocbench --omnidocbench-eval end2end --run-id base-ocr \
+    --ocr tesseract,ppocr --ocr-retry
+```
+
+Reusing one `--run-id` accumulates *different* models into one report, and these two runs are the same model — same
+`--layout`, same `--order`, hence the same `<layout>__<order>` name. The second would overwrite the first's
+`per_model/<model>.json` and its `markdown_pred_<model>/` pages rather than sit beside them.
+
+The OCR pass feeds the end2end scoring, so it needs `--run-omnidocbench` with `--omnidocbench-eval end2end` (or
+`both`) — the detection pass scores boxes and is unaffected by text. Each run prints how many predicted regions were
+rewritten and records it as `ocr_regions_filled` in the per-model results. The per-page prediction markdown under
+`<run>/omnidocbench/markdown_pred_<model>/` is written before the container starts, so the two runs can be diffed
+directly even without Docker.
+
+**Prefer `--ocr-retry junk,alien` when the boxes come from a detector.** `sparse` asks whether a box holds less text
+than a box that shape usually does, and its per-label medians are measured on the hand-drawn ground truth, whose boxes
+are tight. A detector's box is not, so a short but perfectly correct line inside a generous box reads as sparse: on one
+28-page document it re-read `Ime in priimek reševalca` and replaced it with `resšea.l.ca..........`. Dropping `sparse`
+removed that and cost nothing else. It stays worth having on `--coco` runs, where the boxes are the annotated ones.
+
 On the pipeline track, `--emit-omnidocbench` additionally writes one Markdown file per page to `outputs/parsed/<pdf_stem>/omnidocbench/<stem>_<page>.md` — the flat `<image_stem>.md` layout OmniDocBench's end-to-end evaluator mounts at `data_md/predictions`. These pages are rendered from the regions **as the DLA model detected them**, before the heuristic pass that re-joins paragraphs split across columns or pages, so the score reflects the model's own segmentation. The regular `<stem>.md` (and `--per-page` output under `pages/`) stay merged.
 
 ### `rare evaluate` — score one model against a dataset
@@ -284,7 +318,17 @@ rare evaluate --track pipeline --dataset glasbena_mladina \
 
 Both tracks can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s end-to-end evaluator and fold the `text_block` and `reading_order` **Edit distance** into `report.md`. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
 
-_TODO - introduce Edit distance metric for pipeline track, as it currently only works for VLM track._
+On the pipeline track this runs *two* container passes, selectable with `--omnidocbench-eval`:
+
+| Pass | Metrics | Prefix in `report.md` |
+| --- | --- | --- |
+| `detection` | COCODet mAP/AP over the predicted boxes | `bbox_` |
+| `end2end` | `text_block` / `reading_order` Edit distance over per-page Markdown | `odb_` |
+| `both` (default) | both of the above | — |
+
+The two passes ship in different images, so they are configured separately: `--omnidocbench-image` for end2end, `--omnidocbench-layout-image` for detection.
+
+The `end2end` pass renders each page's detected regions through the *same* `to_markdown` renderer the VLM track is scored with.
 
 Before running, pull the following image:
 ```bash
