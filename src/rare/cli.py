@@ -362,8 +362,9 @@ def cmd_parse(args: argparse.Namespace) -> int:
         vlm_cls = get("vlm", args.vlm)
         vlm = vlm_cls(config=_read_config(args.config))
         doc = vlm.parse_pdf(args.pdf)
-        _link(doc, args)
-        out = write_outputs(doc, args.output)
+        if not args.no_link:
+            _link(doc, args)
+        out = write_outputs(doc, args.output, per_page=args.per_page)
         print(f"Output written to: {out}")
         return 0
 

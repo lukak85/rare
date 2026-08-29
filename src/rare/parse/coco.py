@@ -28,25 +28,10 @@ from rare.parse.io import write_outputs
 from rare.parse.ocr import DEFAULT_OCR_LABELS, fill_failed_regions
 from rare.parse.pdf import render_page
 from rare.parse.text import extract_text_for_page
+from rare.utils.fileutils import split_stem_page as _split_stem_page
 
 if TYPE_CHECKING:
     from rare.models.base import ReadingOrderBackend
-
-
-def _split_stem_page(file_name: str) -> tuple[str, int]:
-    """Split a "<stem>_<page>.jpg" file name into (pdf_stem, page_no).
-
-    Falls back to (full-stem, 0) when the trailing token is not an int —
-    matching the convention in `rare.evaluate.datasets`.
-    """
-    name = Path(file_name).name
-    stem_parts = name.rsplit("_", 1)
-    if len(stem_parts) == 2:
-        try:
-            return stem_parts[0], int(stem_parts[1].rsplit(".", 1)[0])
-        except ValueError:
-            pass
-    return Path(name).stem, 0
 
 
 def _bbox_to_norm_1000(bbox: list[float], img_w: int, img_h: int) -> list[float]:
