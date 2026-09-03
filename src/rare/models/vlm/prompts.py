@@ -130,3 +130,22 @@ def whole_pdf_prompt() -> str:
 
 def omnidocbench_pdf_prompt() -> str:
     return OMNIDOCBENCH_PROMPT.format()
+
+
+YOUTU_LABEL_MAP: dict[str, str] = {
+    "Text":          "Paragraph",
+    "Title":         "Headline",
+    "Header":        "Header",
+    "Footer":        "Footer",
+    "Figure":        "Figure",
+    "Caption":       "Caption",
+    "Table":         "Table",
+    "Formula":       "Paragraph",   # no formula category in Glasbena
+    "Code":          "Paragraph",   # nor a code one
+    "Chart_Data":    "Figure",
+    "Chart_Logic":   "Figure",
+    "Seal":          "Figure",
+    "Signature":     "Byline",
+    "Header_Figure": "Abandon",
+    "Footer_Figure": "Abandon",
+}

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pdf2image import convert_from_path
+from pdf2image import convert_from_path, pdfinfo_from_path
 from PIL.Image import Image
+
+
+def page_count(pdf_path: str | Path) -> int:
+    """Number of pages in a PDF, without rendering any of them."""
+    return int(pdfinfo_from_path(str(pdf_path))["Pages"])
 
 
 def render_pages(pdf_path: str | Path, dpi: int = 200) -> list[Image]:

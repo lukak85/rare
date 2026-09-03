@@ -192,9 +192,6 @@ def score_document(
     page_types: Optional[dict[tuple[str, int], str]] = None,
 ) -> tuple[Counter, dict[str, Counter], dict[str, Counter], list[dict]]:
     """Hold the visuals out of one document, put them back, and score the result.
-
-    `doc` is mutated. Returns the outcome counts, the same split by label and
-    by method, and one row per visual.
     """
     stem = Path(doc.source_pdf).stem or doc.source_pdf
 
