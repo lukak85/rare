@@ -31,7 +31,7 @@ pip install -e ".[vgt]" # + VGT dependencies
 pip install -e ".[marker]" # + Marker dependencies
 ```
 
-Furthermore install LayoutParser fork:
+Furthermore, install LayoutParser fork:
 
 ```bash
 pip install -e layout-parser
@@ -66,150 +66,28 @@ rare parse <pdf> --layout doclayout-yolo --ocr tesseract
 rare parse --list-models
 ```
 
-Outputs are stored in `outputs/parsed/<pdf_stem>/{<stem>.html, <stem>.md, <stem>_doc.json, <stem>_articles.json, <stem>_articles.md, figures/}`.
-
 #### Linking
 
-After a document is assembled, a whole-document pass fills in the relationships a single page cannot show: named
-entities on every text region, captions bound to their figure (or, when there is no figure, to the closest article),
-articles made complete and ordered, and pieces continuing across a page break merged into one article. Every inference
-is also recorded in `doc.links` with the method, score and evidence behind it.
+After a document is assembled, a whole-document pass fills in additional information, one of which is linking, which
+uses named entities on every text region, captions bound to their figure, merging continuing paragraph produced by for
+example a page break, into one paragraph and in the end connecting them into an article.
 
-`--ner rudar-slv` needs the NER extra (`pip install -e ".[ner]"`).
+Since linking also uses NER, we can provide it using `--ner rudar-slv`. NER is also used for enriching resulting JSON
+with additional metadata.
 
 #### OCR fallback for failed regions (`--ocr`)
 
-The corpus PDFs are scans: one full-page image per page with an invisible OCR text layer over it. Where that upstream
-OCR gave up, per-region extraction yields nothing — there are no glyphs under the box to extract. Running headers are
-the frequent casualty.
+The corpus PDFs are scans: one full-page image per page with an invisible OCR text layer over it. Some regions contain
+incorrect OCR, which we correct using the following flags:
 
-`--ocr tesseract` re-reads those regions from the pixels, cropping them out of the page re-rendered at
-`--ocr-dpi` (400 by default — 200 is marginal for Tesseract on these scans). By default it runs **only** on regions
-that came back empty, so text the PDF actually carries is never second-guessed, and only on the labels named by
-`--ocr-labels` (default: `Header`). Figures are never OCR'd whatever the label set says. Readings below
-`--ocr-min-confidence`, or that score as junk at any confidence, are discarded — an empty header is a smaller problem
-than a header full of noise.
+- `--ocr tesseract` re-reads those regions from the pixels using the given model,
+- `--ocr-dpi`,
+- `--ocr-labels` (default: `Header`) and
+- `--ocr-min-confidence`, score below which region's OCR is discarder.
 
-Filled regions carry `provenance.text_source: "ocr:tesseract"` and `provenance.ocr_confidence` in the output JSON, so
-OCR'd text stays distinguishable from text the PDF carried. Everything else keeps `"pdf"`.
+#### Classification
 
-##### Text that is present but wrong (`--ocr-retry`)
-
-Emptiness is the easy failure. The expensive one is a region the upstream OCR got *wrong* rather than missed: the
-headline JIŘÍ KYLIÁN arrives as `W Z7`, which is not empty and so is never re-read. `rare.parse.quality` scores a
-region's text against its box and its label and names what is wrong with it:
-
-| reason   | what it catches                                                                                                                                                                                           |
-|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `junk`   | most tokens are not words — no vowel, letters and digits mixed, or a run of bare single letters where letterspaced display type was read glyph by glyph (`0 GL A S N A D E S K A`). `W Z7` scores 2 of 2. |
-| `sparse` | far less text than a box that shape holds, measured by aspect ratio for one-line labels so type size drops out                                                                                            |
-| `alien`  | too many characters from outside the Slovene alphabet — the `□` class of failure                                                                                                                          |
-| `empty`  | empty region                                                                                                                                                                                              |
-
-`--ocr-retry` (bare, or with a subset like `--ocr-retry junk,alien`) sends those regions for a second reading too.
-Overwriting text is held to a higher standard than filling a hole, because the text being overwritten came from the
-publisher's own pass over the original film:
-
-* the reading needs `--ocr-min-replace-confidence` (60) rather than `--ocr-min-confidence` (40);
-* a reading that is itself junk is refused, so `W Z7` is never traded for `VV Z]` — and the region stays visibly broken
-  for a human instead of looking repaired;
-* a reading that throws away most of the region's letters is refused whatever its confidence — PP-OCR in particular
-  answers a broken region with a short, clean, confident string often enough to matter (`b e s e d a u r e d n i š t v a`
-  came back as `enista` at 67). The floor counts letters rather than characters, so the spaces letterspacing adds do
-  not make a genuine repair look like a loss;
-* when both readings score badly the new one wins only if it is at least twice as long, which is the case where the
-  text layer caught one word of a headline and Tesseract caught the line.
-
-A region whose text was replaced keeps `provenance.text_before_ocr` and `provenance.text_flags` alongside the usual
-markers, so every replacement can be reviewed after the run rather than taken on trust:
-
-```bash
-jq -r '.items[].provenance | select(.text_before_ocr) | "\(.text_flags)\t\(.text_before_ocr)"' \
-    outputs/parsed/<stem>/<stem>_doc.json
-```
-
-`examples/manual/audit/run.py` scores an OmniDocBench export with the same module, listing every failed region as a CSV
-with a blank `corrected_text` column — for the ones OCR cannot rescue and a person has to type.
-
-Needs the binary and the Slovenian language data, which is a separate package:
-
-```bash
-sudo apt install tesseract-ocr tesseract-ocr-slv
-```
-
-Parsing fails immediately if the requested `--ocr-lang` is not installed, rather than falling back to English and
-filling the document with plausible-looking text whose diacritics are wrong.
-
-##### A second opinion (`--ocr ppocr`, `--ocr tesseract,ppocr`)
-
-Tesseract is not always enough. The two engines available here fail in *opposite* directions on the failure that is
-left once the empty regions are handled — letterspaced display type. Tesseract explodes the word into single letters
-(`0 GL A S N A D E S K A`); PP-OCRv5 collapses it into one (`yemavugankah` for a header reading "Tema v ugankah"). On
-an outline face Tesseract reads JIŘÍ KYLIÁN as `JA VLA` at confidence 25, while PP-OCR returns `JIRI KYLIÁN` at 0.91.
-
-`--ocr ppocr` swaps the backend; `--ocr tesseract,ppocr` reads every region with both and keeps the better answer — a
-reading that scores as junk loses to one that does not, and confidence only breaks the tie. That costs twice the
-recognition time per region and nothing per page, since the render is shared. The final say still belongs to the same
-gates: a winner that is junk for its label, or under the confidence floor, is discarded like any other reading.
-
-The PP-OCR path comes from `examples/manual/svrt/regions.py`, which stays the place to look at one region at a time and
-see why a reading came out the way it did. Two things it taught, both now baked in:
-
-* **Lines are cut before recognition, not by a model.** PaddleOCR's `TextRecognition` is a *line* recogniser — hand it
-  a three-line headline and it returns one garbled line. Its own `TextDetection` is the obvious cutter and aborts on
-  this paddle build (3.3.1) with `Intel oneMKL function load error`, so lines come from a horizontal ink profile
-  instead. That is reliable here because a layout region is already one block of one column. No detection model is
-  ever loaded.
-* **`--ocr-rec-model` decides which alphabet you get back.** The default `latin_PP-OCRv5_mobile_rec` is the
-  Latin-script multilingual head. The Chinese/English heads have no č, š or ž in their character dictionary and
-  transliterate them away without saying so.
-
-`--ocr-fill-outlines` solidifies hollow letterforms before recognition — flood-fill the background and ink whatever it
-never reached. On the outline headline above it recovers the caron at the cost of the I (`JİŘI KYLIÁN`, 0.88). Off by
-default, since it trades one error for another on filled type.
-
-PP-OCR confidences are reported on Tesseract's 0–100 scale so `--ocr-min-confidence` means one thing either way. Needs
-PaddleOCR, which is best installed into its own conda environment — it clashes with several of the other model extras:
-
-```bash
-pip install -e ".[pp-doclayoutv3]"      # paddleocr[all]
-```
-
-##### Measuring what it bought (`rare evaluate --ocr`)
-
-The same flags exist on `rare evaluate --track pipeline`, so a configuration can be evaluated exactly as it is parsed.
-There they apply to the **predicted** text only. The ground truth keeps whatever text the corpus carries — one text
-source feeding both sides would compare OCR against itself, and `text_block` Edit_dist would barely move. If the ground
-truth should carry corrected text too, hand it in with `--omnidocbench-ground`; `examples/manual/audit/run.py --apply`
-writes exactly that file.
-
-Run the same models twice, **into two separate run directories**, and compare the reports:
-
-```bash
-rare evaluate --track pipeline --dataset glasbena_mladina --layout doclayout-yolo \
-    --run-omnidocbench --omnidocbench-eval end2end --run-id base
-rare evaluate --track pipeline --dataset glasbena_mladina --layout doclayout-yolo \
-    --run-omnidocbench --omnidocbench-eval end2end --run-id base-ocr \
-    --ocr tesseract,ppocr --ocr-retry
-```
-
-Reusing one `--run-id` accumulates *different* models into one report, and these two runs are the same model — same
-`--layout`, same `--order`, hence the same `<layout>__<order>` name. The second would overwrite the first's
-`per_model/<model>.json` and its `markdown_pred_<model>/` pages rather than sit beside them.
-
-The OCR pass feeds the end2end scoring, so it needs `--run-omnidocbench` with `--omnidocbench-eval end2end` (or
-`both`) — the detection pass scores boxes and is unaffected by text. Each run prints how many predicted regions were
-rewritten and records it as `ocr_regions_filled` in the per-model results. The per-page prediction markdown under
-`<run>/omnidocbench/markdown_pred_<model>/` is written before the container starts, so the two runs can be diffed
-directly even without Docker.
-
-**Prefer `--ocr-retry junk,alien` when the boxes come from a detector.** `sparse` asks whether a box holds less text
-than a box that shape usually does, and its per-label medians are measured on the hand-drawn ground truth, whose boxes
-are tight. A detector's box is not, so a short but perfectly correct line inside a generous box reads as sparse: on one
-28-page document it re-read `Ime in priimek reševalca` and replaced it with `resšea.l.ca..........`. Dropping `sparse`
-removed that and cost nothing else. It stays worth having on `--coco` runs, where the boxes are the annotated ones.
-
-On the pipeline track, `--emit-omnidocbench` additionally writes one Markdown file per page to `outputs/parsed/<pdf_stem>/omnidocbench/<stem>_<page>.md` — the flat `<image_stem>.md` layout OmniDocBench's end-to-end evaluator mounts at `data_md/predictions`. These pages are rendered from the regions **as the DLA model detected them**, before the heuristic pass that re-joins paragraphs split across columns or pages, so the score reflects the model's own segmentation. The regular `<stem>.md` (and `--per-page` output under `pages/`) stay merged.
+Final articles are classified by passing in `--classification <classifier>` (default: `gams`).
 
 ### `rare evaluate` — score one model against a dataset
 
@@ -225,7 +103,8 @@ rare evaluate --track vlm --dataset glasbena_mladina \
     [--pdfs-dir dataset/pdfs] [--run-id myrun-2026-05]
 ```
 
-Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumulate models; `report.md` regenerates from every per-model JSON in the run directory.
+Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumulate models; `report.md` produces the
+manual evaluation report.
 
 Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_model/}`.
 
@@ -278,12 +157,10 @@ rare evaluate --track page-genre --classification gams \
     --pdfs-dir datasets/glasbena_mladina/pdfs/eval
 ```
 
-Because a page can holds pieces of several genres, result is reported from three angles:
+Currently, because a page can hold pieces of several genres, evaluation consists of two main results:
 1. `accuracy_dominant` (the  article holding most of the page has the expected genre, the way the pages were annotated
-in the first place), `accuracy_any` (some article on the page does) and
-2. `article_accuracy` over every (page, article) pair — the truth for a mixed page is between the first two.
-3. `genre_coverage` is the share of scored pages carrying any genre at all; a low headline accuracy usually means
-articles went unclassified, not that they were misclassified.
+in the first place)
+2. `accuracy_any` (some article on the page does)
 
 `page_genre_summary.json` holds the **confusion matrix** of page type against the predicted genres.
 
@@ -320,11 +197,11 @@ Both tracks can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'
 
 On the pipeline track this runs *two* container passes, selectable with `--omnidocbench-eval`:
 
-| Pass | Metrics | Prefix in `report.md` |
-| --- | --- | --- |
-| `detection` | COCODet mAP/AP over the predicted boxes | `bbox_` |
-| `end2end` | `text_block` / `reading_order` Edit distance over per-page Markdown | `odb_` |
-| `both` (default) | both of the above | — |
+| Pass             | Metrics                                                             |
+|------------------|---------------------------------------------------------------------|
+| `detection`      | mAP over the predicted boxes                                        |
+| `end2end`        | `text_block` / `reading_order` Edit distance over per-page Markdown |
+| `both` (default) | both of the above                                                   |
 
 The two passes ship in different images, so they are configured separately: `--omnidocbench-image` for end2end, `--omnidocbench-layout-image` for detection.
 
@@ -418,32 +295,8 @@ The supported models (and therefore given Python version recommendations) were t
 
 ## Outputs
 
-`outputs/parsed/<pdf_stem>/<stem>.json` is a `GlasanaDocument`:
-
-```json
-{
-  "source_pdf": "ac30fbcf...",
-  "pages":     {"0": {"page_no": 0, "width": ..., "height": ...}, ...},
-  "items":     {"<uuid>": {"category": "Headline", "text": "...", "provenance": {...},
-                           "entities": [{"text": "Mateja Haller", "label": "PER", "key": "matej haller"}]}, ...},
-  "body_order": ["<uuid>", ...],
-  "articles":  {"<uuid>": {"title": "...", "item_ids": [...], "page_nos": [3, 4],
-                           "section": "ODMEVI", "entity_keys": [...], "continued": true}},
-  "links":     [{"kind": "caption-of", "from_id": "<uuid>", "to_id": "<uuid>",
-                 "method": "geometry", "score": 0.94, "evidence": []}]
-}
-```
-
-`outputs/parsed/<pdf_stem>/<stem>_articles.json` is the denormalised counterpart — one entry per article with its items inlined in reading order, ready to render without joining `items` against `body_order`. `<stem>_articles.md` is the same grouping as Markdown.
-
-`outputs/evaluations/<run_id>/report.md` is a Markdown table — one row per model, one column per metric:
-
-```
-| Model                      | map    | map_50 | kendall_tau |
-|---|---|---|---|
-| doclayout-yolo__top-bottom | 0.6231 | 0.8104 | 0.7402      |
-| rf-detr__top-bottom        | 0.5984 | 0.7891 | 0.6951      |
-```
+Main result of the parser is `<stem>_articles.json`, which contains one entry per article with its items in reading
+order. It can be used to render articles into formats such as Markdown and HTML.
 
 ## Project Structure
 
@@ -467,10 +320,6 @@ datasets/                     # default path for datasets
 layout-parser/                # git submodule (layoutparser fork)
 outputs/                      # outputs/parsed/* + outputs/evaluations/*
 ```
-
-## Ground markdown
-
-_TODO (VLM track)_
 
 ## Additional model-specific setup
 
@@ -861,24 +710,24 @@ Comparison of the best performing VLMs compared to our implementation, given wit
 
 Text = text blocks, Order = reading order.
 
-| Page type          | YP: Text  | YP: Order | Marker: Text | Marker: Order | dots.ocr: Text | dots.ocr: Order | DLY+LR: Text | DLY+LR: Order |
-|--------------------|-----------|-----------|--------------|---------------|----------------|-----------------|--------------|---------------|
-| Advert             | 0.048     | 0.104     | 0.113        | 0.174         | 0.038          | 0.059           | 0.216        | 0.236         |
-| Article            | 0.023     | 0.069     | 0.024        | 0.090         | 0.025          | 0.061           | 0.029        | 0.163         |
-| Cover              | 0.009     | 0.125     | 0.052        | 0.125         | 0.026          | 0.000           | 0.012        | 0.125         |
-| Events             | 0.055     | 0.248     | 0.136        | 0.266         | 0.037          | 0.229           | 0.438        | 0.450         |
-| Images             | 0.172     | 0.092     | 0.401        | 0.192         | 0.185          | 0.083           | 0.370        | 0.253         |
-| Interview          | 0.022     | 0.078     | 0.032        | 0.101         | 0.023          | 0.074           | 0.015        | 0.156         |
-| Letters            | 0.020     | 0.050     | 0.015        | 0.075         | 0.034          | 0.065           | 0.017        | 0.185         |
-| News               | 0.020     | 0.093     | 0.021        | 0.103         | 0.022          | 0.064           | 0.042        | 0.221         |
-| Quiz               | 0.058     | 0.068     | 0.080        | 0.102         | 0.089          | 0.070           | 0.115        | 0.303         |
-| Records            | 0.017     | 0.110     | 0.015        | 0.084         | 0.032          | 0.071           | 0.047        | 0.227         |
-| Special            | 0.175     | 0.186     | 0.222        | 0.297         | 0.145          | 0.201           | 0.345        | 0.427         |
-| TOC                | 0.058     | 0.145     | 0.061        | 0.151         | 0.049          | 0.146           | 0.089        | 0.307         |
-| Unknown            | 0.038     | 0.073     | 0.063        | 0.096         | 0.067          | 0.117           | 0.130        | 0.192         |
-| **All (page avg)** | **0.031** | **0.084** | **0.042**    | **0.103**     | **0.035**      | **0.072**       | **0.059**    | **0.198**     |
-| All (whole)        | 0.025     | 0.081     | 0.028        | 0.099         | 0.029          | 0.068           | 0.041        | 0.214         |
-| All (sample avg)   | 0.039     | 0.084     | 0.055        | 0.103         | 0.043          | 0.072           | 0.053        | 0.198         |
+| Page type          | YP: Text  | YP: Order | Marker: Text | Marker: Order | dots.ocr: Text | dots.ocr: Order | DLY+LR+OCR: Text | DLY+LR+OCR: Order |
+|--------------------|-----------|-----------|--------------|---------------|----------------|-----------------|------------------|-------------------|
+| Advert             | 0.048     | 0.104     | 0.113        | 0.174         | 0.038          | 0.059           | 0.216            | 0.236             |
+| Article            | 0.023     | 0.069     | 0.024        | 0.090         | 0.025          | 0.061           | 0.029            | 0.163             |
+| Cover              | 0.009     | 0.125     | 0.052        | 0.125         | 0.026          | 0.000           | 0.012            | 0.125             |
+| Events             | 0.055     | 0.248     | 0.136        | 0.266         | 0.037          | 0.229           | 0.438            | 0.450             |
+| Images             | 0.172     | 0.092     | 0.401        | 0.192         | 0.185          | 0.083           | 0.370            | 0.253             |
+| Interview          | 0.022     | 0.078     | 0.032        | 0.101         | 0.023          | 0.074           | 0.015            | 0.156             |
+| Letters            | 0.020     | 0.050     | 0.015        | 0.075         | 0.034          | 0.065           | 0.017            | 0.185             |
+| News               | 0.020     | 0.093     | 0.021        | 0.103         | 0.022          | 0.064           | 0.042            | 0.221             |
+| Quiz               | 0.058     | 0.068     | 0.080        | 0.102         | 0.089          | 0.070           | 0.115            | 0.303             |
+| Records            | 0.017     | 0.110     | 0.015        | 0.084         | 0.032          | 0.071           | 0.047            | 0.227             |
+| Special            | 0.175     | 0.186     | 0.222        | 0.297         | 0.145          | 0.201           | 0.345            | 0.427             |
+| TOC                | 0.058     | 0.145     | 0.061        | 0.151         | 0.049          | 0.146           | 0.089            | 0.307             |
+| Unknown            | 0.038     | 0.073     | 0.063        | 0.096         | 0.067          | 0.117           | 0.130            | 0.192             |
+| **All (page avg)** | **0.031** | **0.084** | **0.042**    | **0.103**     | **0.035**      | **0.072**       | **0.059**        | **0.198**         |
+| All (whole)        | 0.025     | 0.081     | 0.028        | 0.099         | 0.029          | 0.068           | 0.041            | 0.214             |
+| All (sample avg)   | 0.039     | 0.084     | 0.055        | 0.103         | 0.043          | 0.072           | 0.053            | 0.198             |
 
 *YP = Youtu-Parsing, DLY+LR = DocLayout-YOLO + LayoutReader.*
 
@@ -902,7 +751,7 @@ Number of correctly classified articles.
 
 # Demo
 
-_TODO_
+To be added.
 
 # TODO
 
