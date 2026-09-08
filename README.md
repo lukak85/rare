@@ -164,9 +164,44 @@ in the first place)
 
 `page_genre_summary.json` holds the **confusion matrix** of page type against the predicted genres.
 
-#### OmniDocBench Layout detection metrics (`--run-omnidocbench`)
+#### OmniDocBench evaluation (`--run-omnidocbench`)
 
-The pipeline track can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s layout evaluator, including **mAP**. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
+Both tracks can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s end-to-end evaluator, which emits `text_block` and `reading_order` **NED**.
+
+On the pipeline track, mode can be selected with `--omnidocbench-eval`:
+
+| Pass             | Metrics                                                   |
+|------------------|-----------------------------------------------------------|
+| `detection`      | mAP over the predicted boxes                              |
+| `end2end`        | `text_block` / `reading_order` NED over per-page Markdown |
+| `both` (default) | both of the above                                         |
+
+The two passes ship in different images, so they are configured separately:
+- `--omnidocbench-image` for end-to-end,
+- `--omnidocbench-layout-image` for detection.
+
+##### OmniDocBench end2end evaluation
+
+Before running, pull the following image:
+```bash
+docker pull ghcr.io/zeng-weijun/omnidocbench-eval:repro-ubuntu2204
+```
+
+Then run:
+```bash
+rare evaluate --track pipeline --dataset glasbena_mladina \
+    --layout doclayout-yolo --order top-bottom \
+    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
+
+rare evaluate --track vlm --dataset glasbena_mladina \
+    --vlm dots-ocr \
+    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
+```
+
+##### OmniDocBench Layout detection evaluation
+
+The pipeline track can also run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s layout evaluator, including **mAP**. Pass `--run-omnidocbench`.
+Use `--omnidocbench-image` to override the image.
 
 Before running, clone the [OmniDocBench](https://github.com/opendatalab/OmniDocBench) repository:
 ```bash
@@ -183,55 +218,10 @@ docker build -t omnidocbench-v15 .
 
 Then run:
 ```bash
-# Pipeline track — implies --emit-omnidocbench. With --pdfs-dir, ground-truth
-# region text is filled from the PDF (real text Edit distance); without it,
-# stub tokens are used and only reading-order box placement is measured.
 rare evaluate --track pipeline --dataset glasbena_mladina \
     --layout doclayout-yolo --order top-bottom \
     --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
 ```
-
-#### OmniDocBench Edit distance (`--run-omnidocbench`)
-
-Both tracks can run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s end-to-end evaluator and fold the `text_block` and `reading_order` **Edit distance** into `report.md`. Pass `--run-omnidocbench`; this runs the pinned OmniDocBench Docker image against the artifacts emitted under `outputs/evaluations/<run_id>/omnidocbench/` (so **Docker must be installed**). Use `--omnidocbench-image` to override the image.
-
-On the pipeline track this runs *two* container passes, selectable with `--omnidocbench-eval`:
-
-| Pass             | Metrics                                                             |
-|------------------|---------------------------------------------------------------------|
-| `detection`      | mAP over the predicted boxes                                        |
-| `end2end`        | `text_block` / `reading_order` Edit distance over per-page Markdown |
-| `both` (default) | both of the above                                                   |
-
-The two passes ship in different images, so they are configured separately: `--omnidocbench-image` for end2end, `--omnidocbench-layout-image` for detection.
-
-The `end2end` pass renders each page's detected regions through the *same* `to_markdown` renderer the VLM track is scored with.
-
-Before running, pull the following image:
-```bash
-docker pull ghcr.io/zeng-weijun/omnidocbench-eval:repro-ubuntu2204
-```
-
-Then run:
-```bash
-# Pipeline track — implies --emit-omnidocbench. With --pdfs-dir, ground-truth
-# region text is filled from the PDF (real text Edit distance); without it,
-# stub tokens are used and only reading-order box placement is measured.
-rare evaluate --track pipeline --dataset glasbena_mladina \
-    --layout doclayout-yolo --order top-bottom \
-    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
-
-# VLM track — REQUIRES --pdfs-dir. The VLM emits real OCR text, so the ground
-# truth must also carry real text (extracted from the PDF); without a resolvable
-# PDF directory the container step is skipped with a warning.
-rare evaluate --track vlm --dataset glasbena_mladina \
-    --vlm dots-ocr \
-    --run-omnidocbench --pdfs-dir datasets/glasbena_mladina/pdfs
-```
-
-Results land in `omnidocbench/results_<model>/` and surface as `odb_text_block_edit` / `odb_reading_order_edit` columns in `report.md`. The container scores `text_block` and `reading_order` only; the formula CDM metric is intentionally omitted (irrelevant for formula-free magazines and it needs the heavy in-container LaTeX stack). Lower Edit distance is better.
-
-> **Note on coverage:** ground truth covers the whole dataset while predictions cover only the samples you ran, so combining `--run-omnidocbench` with `--limit` leaves unmatched GT pages that score the maximum Edit distance of 1.0. Run the full set for headline numbers.
 
 ### `rare tools` — annotation utilities
 
@@ -621,13 +611,13 @@ Note: for Claude, ChatGPT and Gemini, the user must have an account and API key,
 which must then be passed as a parameter. The examples for each of them are present in ther respective
 [configs](configs) directories.
 
-## Evaluation
+## Evaluation results
 
-Two approaches to evaluation are present:
-- manual (hand written functions for computation of mAP, normalized edit distance within the project)
-- using [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — run automatically as part of `rare evaluate` via `--run-omnidocbench` (see [the usage section](#omnidocbench-edit-distance---run-omnidocbench))
-
-Current results are temporary and subject to change with further testing.
+Two approaches to evaluation are computed:
+- manual (hand written functions for computation of mAP, normalized edit distance within the project), however we don't
+report the results here and
+- using [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — run as part of `rare evaluate` via `--run-omnidocbench`
+(see [the usage section](#omnidocbench-evaluation---run-omnidocbench)).
 
 # OmniDocBench Evaluation Results
 
@@ -673,6 +663,8 @@ control and checking of calculations):
 
 ## VLM
 
+**Note**: NED - Normalized edit distance.
+
 ### Specialized VLMs:
 
 | Model               | Type                    | Text block NED   | Reading order NED |
@@ -698,11 +690,7 @@ control and checking of calculations):
 | Claude   | Opus 4.8             | **0.0504**         | 0.0800             | \$0.0935 / 0,082€<br/>-\$0.0279 for 5584 tokens at \$5/MTok IN<br/>-\$0.0656 for 2624 tokens at \$25/MTok OUT   |
 | Gemini   | Gemini 3.1 Pro       | 0.0718             | **0.0664**         | \$0.0988 / 0,086€<br/>-\$0.0025 for 1277 tokens at ~\$2/MTok IN<br/>-\$0.0961 for 8007 tokens at ~\$12/MTok OUT |
 
-\* Currently only evaluated on a single PDF.
-
-\** As of 15.7.2026, unoptimized (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
-
-**Note**: NED - Normalized edit distance
+\* As of 15.7.2026, unoptimized (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
 
 #### Page wise breakdown of NED scores for best VLMs
 
@@ -731,13 +719,32 @@ Text = text blocks, Order = reading order.
 
 *YP = Youtu-Parsing, DLY+LR = DocLayout-YOLO + LayoutReader.*
 
-\* Due to ground truth being obtained using bounding boxes but same OCR-ed letters, the text block NED is not directly
-comparable to the other VLMs, but is included for reference.
+\* Due to ground truth being obtained using bounding boxes but same OCR-ed letters (barring retrying of failed
+extractions), the text block NED is not directly comparable to the other VLMs, but is included for reference.
+
 
 ### Figure linking results
 
-Percentage of figures, captions and figure bylines correctly linked to their respsective articles using proximity,
+Ablation study, scores figures, captions and figure bylines correctly linked to their respective articles using proximity,
 NER and additional heuristics.
+
+| Variant    | Description             | Accuracy (%) |
+|------------|-------------------------|-------------:|
+| `full`     | Full heuristic pipeline |        82.63 |
+| `geometry` | Geometry only           |        82.78 |
+| `ner`      | NER only                |        16.01 |
+| `nearest`  | Nearest anchor          |        83.65 |
+| `mean`     | Mean distance           |        52.79 |
+
+
+### Retried OCR results
+
+Text block NED scores for our pipeline implementation with and without OCR retrying:
+
+| Model         | Text block NED |
+|---------------|----------------|
+| No re-OCR-ing | 0.061          |
+| Re-OCR-ing    | 0.059          |
 
 
 ### Classification results
@@ -747,6 +754,7 @@ Number of correctly classified articles.
 | Model             | Matching |
 |-------------------|----------|
 | Gams-12B-Instruct | 0.5968   |
+| GPT 5.6           | TODO     |
 
 
 # Demo
