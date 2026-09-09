@@ -3,10 +3,13 @@
 RaRe is a parsing toolkit for Slovene magazines (primarily *Glasbena Mladina*), built on top of a fork of [layoutparser](https://github.com/Layout-Parser/layout-parser).
 It exposes two tracks for parsing PDFs and comparing models on annotated data:
 
-- **Pipeline track** — DLA model → reading-order → assembled `GlasanaDocument` → HTML / Markdown / JSON.
+- **Pipeline track** — DLA model → reading-order (additional OCR → figure linking →) assembled `GlasanaDocument` → HTML / Markdown / JSON.
 - **VLM track** — vision-language model (cloud or locally-served) producing HTML / Markdown / JSON directly.
 
-Pipelines track (at the moment) assumes presence of previously OCR-ed PDFs.
+These are furthermore enriched with named entities, and classification.
+
+Pipelines track assumes presence of previously OCR-ed PDFs. If empty, the text layer can be re-read using `--ocr`
+flag.
 
 ## Installation
 
@@ -66,6 +69,9 @@ rare parse <pdf> --layout doclayout-yolo --ocr tesseract
 rare parse --list-models
 ```
 
+<details>
+<summary><b>Additional info</b></summary>
+
 #### Linking
 
 After a document is assembled, a whole-document pass fills in additional information, one of which is linking, which
@@ -89,15 +95,17 @@ incorrect OCR, which we correct using the following flags:
 
 Final articles are classified by passing in `--classification <classifier>` (default: `gams`).
 
+</details>
+
 ### `rare evaluate` — score one model against a dataset
 
 ```bash
-# Pipeline track — layout mAP + reading-order Kendall tau
+# Pipeline track
 rare evaluate --track pipeline --dataset glasbena_mladina \
     --layout doclayout-yolo --order top-bottom \
     [--run-id myrun-2026-05] [--limit 5]
 
-# VLM track — F1 + edit-distance ratio against gold markdown
+# VLM track 
 rare evaluate --track vlm --dataset glasbena_mladina \
     --vlm claude \
     [--pdfs-dir dataset/pdfs] [--run-id myrun-2026-05]
@@ -107,6 +115,9 @@ Each invocation runs **one model**. Re-invoke with the same `--run-id` to accumu
 manual evaluation report.
 
 Outputs are stored in `outputs/evaluations/<run_id>/{report.md, scores.csv, per_model/}`.
+
+<details>
+<summary><b>Additional info</b></summary>
 
 #### Figure/caption → article attachment (`--track figure-link`)
 
@@ -122,8 +133,6 @@ Linking is done using 3 heuristics:
 
 Evaluation of the resulting links:
 ```bash
-# Linking alone — documents are rebuilt from the ground-truth boxes and order,
-# so detection and reading order are perfect and only rare.link is measured.
 rare evaluate --track figure-link --dataset glasbena_mladina \
     --pdfs-dir datasets/glasbena_mladina/pdfs/eval
 ```
@@ -151,7 +160,6 @@ with selected page types):
 | `BackPage`         | *not scored*                |
 
 ```bash
-# Score a real parse; genres come from whatever --classification produced.
 rare evaluate --track page-genre --classification gams \
     --dataset glasbena_mladina \
     --pdfs-dir datasets/glasbena_mladina/pdfs/eval
@@ -163,6 +171,8 @@ in the first place)
 2. `accuracy_any` (some article on the page does)
 
 `page_genre_summary.json` holds the **confusion matrix** of page type against the predicted genres.
+
+</details>
 
 #### OmniDocBench evaluation (`--run-omnidocbench`)
 
@@ -786,10 +796,9 @@ Top priority:
 Pipeline based track:
 - Built layout detection and reading order detection tasks are evaluated separately (reading order is evaluated using
 ground bounding boxes).
-- Currently RaRe only supports inference; possible extension includes training of the available models.
-- Adding support for Paragraph2Graph, M2Doc
-- VLM track currently only supports output in the formats given by each of the model itself. Further improvement could
-see its integration into rare and outputting in an arbitrary format (such as JSON, HTML etc.)
+- Currently, RaRe only supports inference; possible extension includes training of the available models.
+- VLM track currently only supports Youtu-parse. Further improvement could see integration of a larger number of models
+into rare, so they can be output in an arbitrary format (such as JSON, HTML etc.)
 
 # Acknowledgements
 
