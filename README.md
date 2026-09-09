@@ -612,19 +612,20 @@ which must then be passed as a parameter. The examples for each of them are pres
 [configs](configs) directories.
 
 ## Evaluation results
+  
+The following results were obtained by evaluating detections made by the following models on ground truths of
+manually annotated Glasbena Mladina magazines.
 
-Two approaches to evaluation are computed:
-- manual (hand written functions for computation of mAP, normalized edit distance within the project), however we don't
-report the results here and
+**Note**: NED - Normalized edit distance.
+
+### Layout Analysis
+
+Two approaches to evaluation are can be computed:
+- manual (hand written functions for computation of mAP), however we don't  report the results here and
 - using [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — run as part of `rare evaluate` via `--run-omnidocbench`
 (see [the usage section](#omnidocbench-evaluation---run-omnidocbench)).
 
-# OmniDocBench Evaluation Results
-
-The following results were obtained by evaluating detections made by the following models on ground truths of
-manually annotated Glasbena Mladina magazines. 
-
-## Layout Analysis
+The results in the following table were obtained using OmniDocBench's evaluation.
 
 | Model (_detection backbone_) | Pretrained (or model size) / fine-tuned on | Score threshold | mAP / mAP50 / mAP75 / mAP-s / mAP-m / mAP-l (%)                             | Title / text / figure / figure caption AP (%)       |
 |------------------------------|--------------------------------------------|-----------------|-----------------------------------------------------------------------------|-----------------------------------------------------|
@@ -651,21 +652,20 @@ control and checking of calculations):
 | RF-DETR        | -        | DocLayNet | 0.3422 / 0.4064 / 0.3678 | 0.4910 / 0.6244 / 0.53606          |
 </details>
 
-## Reading Order
 
-| Model                     | Normalized edit distance | BLEU              |
-|---------------------------|--------------------------|-------------------|
-| Top to bottom             | 0.6556                   | 0.1007            |
-| Left to right             | <ins>0.2222</ins>        | 0.6322            |
-| PaddleX's Improved XY-Cut | 0.2411                   | <ins>0.6349</ins> |
-| LayoutReader              | **0.1696**               | **0.7143**        |
+### Reading Order
+
+| Model                     | NED               | BLEU              |
+|---------------------------|-------------------|-------------------|
+| Top to bottom             | 0.6556            | 0.1007            |
+| Left to right             | <ins>0.2222</ins> | 0.6322            |
+| PaddleX's Improved XY-Cut | 0.2411            | <ins>0.6349</ins> |
+| LayoutReader              | **0.1696**        | **0.7143**        |
 
 
-## VLM
+### VLM
 
-**Note**: NED - Normalized edit distance.
-
-### Specialized VLMs:
+#### Specialized VLMs:
 
 | Model               | Type                    | Text block NED   | Reading order NED |
 |---------------------|-------------------------|------------------|-------------------|
@@ -682,7 +682,8 @@ control and checking of calculations):
 
 \* Only results successfully parsed were scored against ground truth.
 
-### General VLMs
+
+#### General VLMs
 
 | Model    | Type                 | Text block NED*    | Reading order NED* | Mean cost per page** and token usage                                                                            |
 |----------|----------------------|--------------------|--------------------|-----------------------------------------------------------------------------------------------------------------|
@@ -692,7 +693,8 @@ control and checking of calculations):
 
 \* As of 15.7.2026, unoptimized (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
 
-#### Page wise breakdown of NED scores for best VLMs
+
+### Page wise breakdown of NED scores for best VLMs
 
 Comparison of the best performing VLMs compared to our implementation, given with normalized edit distance by page type.
 
