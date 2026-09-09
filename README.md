@@ -693,6 +693,16 @@ control and checking of calculations):
 
 \* As of 15.7.2026, unoptimized (no use of cache), using similar resolution as seen on OmniDocBench dataset images.
 
+### Retried OCR results
+
+Text block NED scores for our pipeline implementation with and without OCR retrying, using our trained DocLayout-YOLO
+model and LayoutReader for reading order.
+
+| Model         | Text block NED |
+|---------------|----------------|
+| No re-OCR-ing | 0.061          |
+| Re-OCR-ing    | 0.059          |
+
 
 ### Page wise breakdown of NED scores for best VLMs
 
@@ -737,16 +747,6 @@ NER and additional heuristics.
 | `ner`      | NER only                |        16.01 |
 | `nearest`  | Nearest anchor          |        83.65 |
 | `mean`     | Mean distance           |        52.79 |
-
-
-### Retried OCR results
-
-Text block NED scores for our pipeline implementation with and without OCR retrying:
-
-| Model         | Text block NED |
-|---------------|----------------|
-| No re-OCR-ing | 0.061          |
-| Re-OCR-ing    | 0.059          |
 
 
 ### Classification results
