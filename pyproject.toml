@@ -23,7 +23,8 @@ dependencies = [
     "pdf2image",
     "pillow",
     "opencv-python",
-    "tqdm"
+    "tqdm",
+    "python-Levenshtein"
 ]
 
 [project.optional-dependencies]
