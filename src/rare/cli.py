@@ -880,6 +880,12 @@ def build_parser() -> argparse.ArgumentParser:
              "rare.link.classify reads off the running headers).",
     )
     p_eval.add_argument(
+        "--classification-config",
+        dest="classification_config",
+        help="figure-link/page-genre tracks: JSON config for the classification "
+             "backend (e.g. api_key/base_url/model for gpt).",
+    )
+    p_eval.add_argument(
         "--link-config",
         help="JSON config file for the linking passes (see `parse --link-config`).",
     )

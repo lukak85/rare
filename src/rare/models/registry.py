@@ -79,6 +79,7 @@ _DEFERRED: dict[str, dict[str, str]] = {
     },
     "classification": {
         "gams":                 "rare.models.classification.gams",
+        "gpt":                  "rare.models.classification.gpt",
     },
 }
 

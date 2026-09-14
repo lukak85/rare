@@ -7,35 +7,25 @@ import aiohttp
 from rare.models.registry import register
 
 
-@register("classification", "gams")
-class GamsClassification:
-    """Editorial-genre classifier prompting GaMS-3 12B Instruct in Slovenian.
-
-    Config keys: ``model`` (checkpoint, default ``cjvt/GaMS3-12B-Instruct``),
-    ``classes`` (the genre list to choose from), ``max_new_tokens``.
-    """
+@register("classification", "gpt")
+class GPTClassification:
 
     def __init__(self, config: dict | None = None):
         cfg = dict(config or {})
 
-        api_key = config.get("api_key", None)
-        base_url = config.get("base_url", None)
-        model_name = config.get("model", "gpt-5.5")
+        api_key = cfg.get("api_key")
+        base_url = cfg.get("base_url")
+        if not api_key:
+            raise ValueError("API key must be provided for GPTClassification.")
+        if not base_url:
+            raise ValueError("Base URL must be provided for GPTClassification.")
 
-        if api_key is None:
-            raise ValueError("API key must be provided for GPTBackend.")
-        if base_url is None:
-            raise ValueError("Base URL must be provided for GPTBackend.")
-
-        self.api_key = api_key
-        self.base_url = base_url
-        self.model_name = model_name
-
-        self.max_retries = 0  # set retry times
-        self.request_sleep = 5  # set sleep time(seconds)
+        self.base_url = base_url.rstrip("/")
+        self.model_name = cfg.get("model", "gpt-5.5")
+        self.timeout = float(cfg.get("timeout", 120))
 
         self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
@@ -69,27 +59,13 @@ class GamsClassification:
                         {"role": "user", "content": prompt}
                     ],
                 },
-                headers=self.headers
+                headers=self.headers,
         ) as response:
-            await asyncio.sleep(self.request_sleep)
-            print(response)
-
-            if response.status == 200:
-                result = await response.json()
-                print(result)
-                return result['choices'][0]['message']['content']
-
-        return None
-
-    def run_classification(self, text: str) -> str:
-        """Run the classification synchronously."""
-        import asyncio
-
-        async def main():
-            async with aiohttp.ClientSession() as session:
-                return await self._prompt_class(session, text)
-
-        return asyncio.run(main())
+            if response.status != 200:
+                body = await response.text()
+                raise RuntimeError(f"{self.model_name} returned HTTP {response.status}: {body[:500]}")
+            result = await response.json()
+            return result["choices"][0]["message"]["content"]
 
     def classify(self, text: str) -> str:
         """Return the model's reply verbatim.
@@ -98,4 +74,9 @@ class GamsClassification:
         job (`rare.link.classify`), which reads `classes` off this object — so
         the same matching serves any generative backend registered here.
         """
-        return self.run_classification(text)
+        async def main():
+            timeout = aiohttp.ClientTimeout(total=self.timeout)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                return await self._prompt_class(session, text)
+
+        return asyncio.run(main())
