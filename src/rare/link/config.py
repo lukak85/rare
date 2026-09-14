@@ -48,6 +48,12 @@ class LinkConfig:
     # Fan-out cap for entity-overlap links, per item.
     max_entity_links_per_item: int = 8
 
+    # --- article segmentation -----------------------------------------------------
+    # Articles run headline to headline and are cut again only where the
+    # running header changes (`rare.link.segment`). When on, the column split,
+    # section split and continuation merge below do not run.
+    segment_on_headline_and_header: bool = True
+
     # --- column splitting -------------------------------------------------------
     # A column (records, letters, news briefs) carries one Headline for the
     # whole page and sets each individual piece under a Subhead; a feature uses
@@ -96,6 +102,10 @@ class LinkConfig:
     # Captions and standfirsts get labelled Header; a long one standing in for
     # a section name would invent a change on every page it appears.
     section_header_max_words: int = 8
+    # Running headers sit in the top of the page (all within 18% of its height
+    # in this corpus); a Header further down is mostly a caption, a title or a
+    # photo credit. On a page with a header up there, lower ones are ignored.
+    section_header_top_frac: float = 0.2
     # Cutting one or two stray items off the end of an article buys nothing.
     section_change_min_piece_items: int = 3
     # A change of section also forbids merging across it.

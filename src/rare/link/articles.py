@@ -34,29 +34,40 @@ TOP_ENTITY_KEYS = 10
 # A running header is a couple of words. Anything longer is a caption or a
 # standfirst the detector labelled Header by mistake.
 DEFAULT_HEADER_MAX_WORDS = 8
+# …and it is printed in the top of the page (see LinkConfig.section_header_top_frac).
+DEFAULT_HEADER_TOP_FRAC = 0.2
 
 
 _MIXED_CASE = re.compile(r"[a-zčšžćđ][A-ZČŠŽĆĐ]")
 _WORD = re.compile(r"\w+", re.UNICODE)
+# "Hat", "(Hat": a capital then only lowercase letters.
+_TITLE_CASE = re.compile(r"^\W*[A-ZČŠŽĆĐ][a-zčšžćđ]+\W*$")
 
 
-def clean_header(text: str) -> str:
+def clean_header(text: str, keep_tail: bool = True) -> str:
     """Strip mirrored bleed-through from a running header.
 
-    These scans print the facing page's header through the paper, and OCR reads
-    it back-to-front interleaved with the real one: "OHVaLLNSCKOH KOMENTIRAMO",
-    "nraaH dso a V OSPREDJU". The reversed text lands as tokens with lowercase
-    letters immediately followed by uppercase ones, which no real word here has,
-    and the genuine section names are set in capitals. Dropping everything else
-    recovers the section name often enough to be useful for display and for the
-    loose matching in `rare.link.crosspage`.
+    The bleed lands before or between the capitals of the real section name
+    ("vpasa sirasoa POSKUS ESEJA", "H im i zi hnih MINE IZ TUJIH"), so lowercase
+    there is dropped. Lowercase after the last capital token is kept: that is a
+    mixed-case header ("GM novice", "AFRIKA s prve roke"), not noise — unless
+    it is title case ("(XI, (Hat"), which no header tail here is.
+    `keep_tail=False` keeps the capitals alone, for a Header region that is
+    really an announcement with a section name set in capitals inside it.
     """
-    tokens = [
+    tokens = (text or "").split()
+    is_caps = [token.isupper() and not _MIXED_CASE.search(token) for token in tokens]
+    if not any(is_caps):
+        return (text or "").strip()
+    last_caps = max(i for i, caps in enumerate(is_caps) if caps)
+    kept = [
         token
-        for token in (text or "").split()
-        if token.isupper() and not _MIXED_CASE.search(token)
+        for i, token in enumerate(tokens)
+        if is_caps[i]
+        or (keep_tail and i > last_caps and not _MIXED_CASE.search(token)
+            and not _TITLE_CASE.match(token))
     ]
-    return " ".join(tokens) or (text or "").strip()
+    return " ".join(kept)
 
 
 def header_tokens(text: str | None) -> set[str]:
@@ -126,24 +137,41 @@ def same_section(
 
 def is_running_header(text: str | None, max_words: int) -> bool:
     """Whether `text` is short enough to be a running header rather than prose.
-
-    Captions and standfirsts get labelled Header often enough to matter, and
-    one of them standing in for a section name invents a section change on
-    every page it appears.
     """
     words = _WORD.findall(text or "")
-    return bool(words) and len(words) <= max_words
+    count = 0
+    in_fragment_run = False
+    for word in words:
+        fragment = len(word) <= 2
+        if not (fragment and in_fragment_run):
+            count += 1
+        in_fragment_run = fragment
+    return bool(words) and count <= max_words
+
+
+def _header_text(item, max_words: int) -> Optional[str]:
+    """The section name a Header/Section item carries, or None when it names none."""
+    text = clean_header(item.text or "")
+    if text and not is_running_header(text, max_words):
+        # A mixed-case tail made it prose-length; the capitals alone
+        # may still name the section.
+        text = clean_header(item.text or "", keep_tail=False)
+    return text if text and is_running_header(text, max_words) else None
 
 
 def running_headers(
     doc: GlasanaDocument, max_words: int = DEFAULT_HEADER_MAX_WORDS
 ) -> dict[int, str]:
-    """The section header printed on each page, if any."""
+    """One section header per page, if any: the longest of the page's headers.
+
+    A page can carry several (`page_headers`); this is for the passes that
+    only ask what section a page belongs to as a whole.
+    """
     headers: dict[int, list[str]] = defaultdict(list)
     for item in doc.items.values():
         if isinstance(item, (HeaderItem, SectionItem)):
-            text = clean_header(item.text or "")
-            if text and is_running_header(text, max_words):
+            text = _header_text(item, max_words)
+            if text:
                 headers[item.provenance.page_no].append(text)
     # Longest wins: what survives cleaning is usually the real section name.
     return {
@@ -151,13 +179,84 @@ def running_headers(
     }
 
 
+# (x1, y1, text) of one header on a page, in page coordinates.
+PageHeader = tuple[float, float, str]
+
+
+def page_headers(
+    doc: GlasanaDocument,
+    max_words: int = DEFAULT_HEADER_MAX_WORDS,
+    top_frac: float = DEFAULT_HEADER_TOP_FRAC,
+) -> dict[int, list[PageHeader]]:
+    """Every section header on each page, with where it is printed.
+
+    A page is often split between sections — "Odmevi" over its left part and
+    "Telegrami" over the right column — so one header per page cannot say which
+    section an item is in. `header_at` can, from these positions.
+
+    Headers below the top `top_frac` of the page are dropped wherever the page
+    has one inside it: down there a Header is usually a caption, a title or a
+    photo credit, and it would carve the page into sections that are not.
+    """
+    headers: dict[int, list[PageHeader]] = defaultdict(list)
+    sections: dict[int, list[PageHeader]] = defaultdict(list)
+    for item in doc.items.values():
+        if isinstance(item, (HeaderItem, SectionItem)):
+            text = _header_text(item, max_words)
+            if text:
+                box = item.provenance.bbox
+                found = headers if isinstance(item, HeaderItem) else sections
+                found[item.provenance.page_no].append((box["x1"], box["y1"], text))
+    # A Section label sits inside the text — a record title, a column's name —
+    # so its position marks out no part of the page. It stands in only on a
+    # page with no Header, and then, as the page's one header, covers all of it.
+    for page_no, found in sections.items():
+        if page_no not in headers:
+            headers[page_no] = [max(found, key=lambda h: len(h[2]))]
+    for page_no, found in headers.items():
+        page = doc.pages.get(page_no)
+        if page is None or not page.height:
+            continue
+        top = [h for h in found if h[1] <= top_frac * page.height]
+        if top:
+            headers[page_no] = top
+    return {page_no: sorted(found) for page_no, found in headers.items()}
+
+
+def header_at(headers: Optional[list[PageHeader]], bbox: dict) -> Optional[str]:
+    """The header governing an item at `bbox`, among its page's `headers`.
+
+    A lone header covers the whole page. With several, a header covers what is
+    below it and to its right, up to the next header across — so an item takes,
+    among the headers printed above its middle, the nearest one to its left;
+    failing that the leftmost of them. An item above every header takes the
+    nearest to its left of all of them, on the same terms.
+    """
+    if not headers:
+        return None
+    if len(headers) == 1:
+        return headers[0][2]
+    cx = (bbox["x1"] + bbox["x2"]) / 2
+    cy = (bbox["y1"] + bbox["y2"]) / 2
+    candidates = [h for h in headers if h[1] <= cy] or list(headers)
+    to_the_left = [h for h in candidates if h[0] <= cx]
+    if to_the_left:
+        return max(to_the_left, key=lambda h: h[0])[2]
+    return min(candidates, key=lambda h: h[0])[2]
+
+
 def refresh(
     doc: GlasanaDocument,
     article: Article,
     index: Optional[EntityIndex] = None,
     headers: Optional[dict[int, str]] = None,
+    zones: Optional[dict[int, list[PageHeader]]] = None,
 ) -> None:
-    """Recompute an article's derived fields from its current item list."""
+    """Recompute an article's derived fields from its current item list.
+
+    With `zones` (`page_headers`), the section is the header over the article's
+    first item that has one; with only `headers`, that of its first page.
+    """
     pages = sorted(
         {
             doc.items[iid].provenance.page_no
@@ -167,7 +266,14 @@ def refresh(
     )
     article.page_nos = pages
 
-    if headers:
+    if zones:
+        for iid in article.item_ids:
+            item = doc.items.get(iid)
+            section = item and header_at(zones.get(item.provenance.page_no), item.provenance.bbox)
+            if section:
+                article.section = section
+                break
+    elif headers:
         for page_no in pages:
             if page_no in headers:
                 article.section = headers[page_no]
@@ -193,9 +299,10 @@ def rebuild(
     membership, so earlier passes can move an item simply by repointing it.
     """
     position = {iid: i for i, iid in enumerate(doc.body_order)}
-    headers = running_headers(
+    zones = page_headers(
         doc,
         config.section_header_max_words if config else DEFAULT_HEADER_MAX_WORDS,
+        config.section_header_top_frac if config else DEFAULT_HEADER_TOP_FRAC,
     )
 
     members: dict[str, list[str]] = defaultdict(list)
@@ -220,4 +327,4 @@ def rebuild(
         article.item_ids = sorted(
             item_ids, key=lambda iid: (position.get(iid, len(position)), iid)
         )
-        refresh(doc, article, index, headers)
+        refresh(doc, article, index, zones=zones)

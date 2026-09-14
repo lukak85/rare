@@ -331,6 +331,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
             ocr=_make_ocr(args),
             ocr_labels=_ocr_labels(args),
             ocr_retry=_ocr_retry(args),
+            region_texts=args.region_texts,
         )
         for out in out_dirs:
             print(f"Output written to: {out}")
@@ -420,33 +421,31 @@ def _resolve_annotations(args: argparse.Namespace) -> Path | None:
     return None
 
 
-def _evaluate_page_genre(args: argparse.Namespace) -> int:
-    """`--track page-genre`: annotated page type vs predicted genre (see rare.evaluate.page_genre)."""
-    from rare.evaluate.page_genre import run_page_genre
+def _evaluate_article_genre(args: argparse.Namespace) -> int:
+    """`--track article-genre`: predicted vs labelled genre per article (see rare.evaluate.article_genre)."""
+    from rare.evaluate.article_genre import DEFAULT_GT_DIR, run_article_genre
 
-    root = Path(args.data_root or f"datasets/{args.dataset}")
-    coco_path = _resolve_annotations(args)
-    if coco_path is None:
-        print(f"error: no COCO annotations found under {root}.", file=sys.stderr)
+    gt_dir = Path(args.docs_dir) if args.docs_dir else DEFAULT_GT_DIR
+    if not any(gt_dir.glob("*_articles.json")):
+        print(
+            f"error: no *_articles.json under {gt_dir}; build them with "
+            "scripts/classification/build_article_genre_gt.py.",
+            file=sys.stderr,
+        )
         return 2
 
-    pdfs_dir = Path(args.pdfs_dir) if args.pdfs_dir else root / "pdfs"
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = Path(args.output) / run_id
-
-    summary = run_page_genre(
-        coco_path,
+    summary = run_article_genre(
+        gt_dir,
         run_dir,
-        docs_dir=args.docs_dir,
-        pdfs_dir=pdfs_dir if pdfs_dir.exists() else None,
-        linker=(lambda doc: _link(doc, args)) if not args.docs_dir else None,
-        page_type_map=args.page_type_map,
+        classifier=_make_classifier(args),
+        config=_read_config(getattr(args, "link_config", None)),
         limit=args.limit,
         dataset_name=args.dataset,
     )
     print(f"\nAggregates: {json.dumps(summary['overall'], indent=2)}")
-    print(f"Scored page types: {', '.join(summary['scored_page_types'])}")
-    print(f"Ignored page types: {', '.join(summary['ignored_page_types'])}")
+    print(f"Prediction sources: {summary['prediction_sources']}")
     print(f"Report: {run_dir / 'report.md'}")
     return 0
 
@@ -501,8 +500,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     # no gold layouts, so they skip the loader (and layoutparser with it).
     if args.track == "figure-link":
         return _evaluate_figure_link(args)
-    if args.track == "page-genre":
-        return _evaluate_page_genre(args)
+    if args.track == "article-genre":
+        return _evaluate_article_genre(args)
 
     # Must run before dataset loading: gold-layout construction imports
     # layoutparser, which freezes LAYOUTPARSER_BACKEND for the process.
@@ -651,6 +650,14 @@ def build_parser() -> argparse.ArgumentParser:
              "text via pdfplumber. Without it, regions render with empty text.",
     )
     p_parse.add_argument(
+        "--region-texts",
+        dest="region_texts",
+        help="COCO-track: OmniDocBench JSON exported from the same annotations "
+             "(e.g. datasets/glasbena_mladina/omnidocbench/omnidocbench.json) whose "
+             "region text is used verbatim, matched by annotation id, instead of "
+             "reading the PDF. Pages it does not fully cover fall back to --pdfs-dir.",
+    )
+    p_parse.add_argument(
         "--per-page",
         action="store_true",
         help="Output Markdown in per-page format.",
@@ -732,7 +739,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument(
         "--track",
         required=True,
-        choices=["pipeline", "vlm", "figure-link", "page-genre"],
+        choices=["pipeline", "vlm", "figure-link", "article-genre"],
         help="Which track to evaluate.",
     )
     p_eval.add_argument(
@@ -842,19 +849,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="List backends and exit (same as `rare parse --list-models`).",
     )
 
-    # --- figure-link / page-genre tracks -----------------------------------
+    # --- figure-link / article-genre tracks --------------------------------
     p_eval.add_argument(
         "--annotations",
-        help="figure-link/page-genre tracks: COCO annotations (figure-link needs "
-             "`order_id`, page-genre needs `page_type`). Default: "
+        help="figure-link track: COCO annotations with `order_id`. Default: "
              "<data_root>/annotations_with_order.json, else annotations.json.",
     )
     p_eval.add_argument(
         "--docs-dir",
-        help="figure-link/page-genre tracks: score the `*_doc.json` files under this "
-             "directory. figure-link requires them and defaults to outputs/parsed/gt; "
-             "page-genre scores them end to end, and omitting it there builds "
-             "documents from the ground-truth layout and order instead.",
+        help="figure-link track: score the `*_doc.json` files under this directory "
+             "(default: outputs/parsed/gt). article-genre track: the folder of "
+             "labelled *_articles.json files (default: outputs/parsed/gt/articles_fixed).",
     )
     p_eval.add_argument(
         "--variants",
@@ -863,26 +868,20 @@ def build_parser() -> argparse.ArgumentParser:
              "rare.evaluate.figure_link.VARIANTS).",
     )
     p_eval.add_argument(
-        "--page-type-map",
-        help="page-genre track: JSON file of {page_type: genre | [genres] | null} "
-             "merged over the built-in map; null leaves that page type out of the "
-             "score (see rare.evaluate.page_genre.PAGE_TYPE_TO_GENRE).",
-    )
-    p_eval.add_argument(
         "--ner",
-        help="figure-link/page-genre tracks: NER backend for the linking passes "
+        help="figure-link track: NER backend for the linking passes "
              "(default: none).",
     )
     p_eval.add_argument(
         "--classification",
-        help="figure-link/page-genre tracks: article-genre backend for the linking "
-             "passes (default: none, which leaves page-genre with the genres "
-             "rare.link.classify reads off the running headers).",
+        help="figure-link/article-genre tracks: article-genre backend (default: "
+             "none, which leaves article-genre with the genres rare.link.classify "
+             "reads off the running headers).",
     )
     p_eval.add_argument(
         "--classification-config",
         dest="classification_config",
-        help="figure-link/page-genre tracks: JSON config for the classification "
+        help="figure-link/article-genre tracks: JSON config for the classification "
              "backend (e.g. api_key/base_url/model for gpt).",
     )
     p_eval.add_argument(

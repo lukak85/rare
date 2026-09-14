@@ -7,6 +7,9 @@ end-to-end pipeline, but skipping layout detection entirely.
 
 Text is filled per-box from a matching source PDF when one resolves under
 `pdfs_dir` (`<stem>.pdf`); otherwise regions keep empty text (structure-only).
+Alternatively `region_texts` supplies it from an OmniDocBench JSON of the same
+annotations — e.g. one whose region text was corrected by hand — matched to
+each box by its COCO annotation id.
 Figure crops are taken from the page image when an image (from `images_dir`)
 or a rendered PDF page is available.
 """
@@ -43,6 +46,36 @@ def _bbox_to_norm_1000(bbox: list[float], img_w: int, img_h: int) -> list[float]
         (x + w) / img_w * 1000.0,
         (y + h) / img_h * 1000.0,
     ]
+
+
+def load_region_texts(path: str | Path, coco: COCO) -> dict[int, str]:
+    """`{coco annotation id: text}` from an OmniDocBench JSON of these annotations.
+
+    Each `layout_dets` entry's `anno_id` is the COCO annotation it was exported
+    from. An entry whose id names an annotation on a different image (a JSON
+    exported from another version of the annotations) is skipped and counted,
+    rather than putting one page's text on another.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    image_id_of = {info["file_name"]: image_id for image_id, info in coco.imgs.items()}
+    texts: dict[int, str] = {}
+    mismatched = 0
+    for page in json.loads(Path(path).read_text()):
+        image_id = image_id_of.get(Path(page["page_info"]["image_path"]).name)
+        for det in page.get("layout_dets", []):
+            ann = coco.anns.get(det.get("anno_id"))
+            if image_id is None or ann is None or ann["image_id"] != image_id:
+                mismatched += 1
+                continue
+            texts[det["anno_id"]] = det.get("text") or ""
+    if mismatched:
+        logger.warning(
+            "%d regions in %s match no annotation on their page; their text comes "
+            "from the PDF instead", mismatched, path,
+        )
+    return texts
 
 
 def _order_regions(
@@ -104,6 +137,7 @@ def parse_coco(
     ocr=None,
     ocr_labels=None,
     ocr_retry=None,
+    region_texts: str | Path | None = None,
 ) -> list[Path]:
     """Render every document described by a COCO file to HTML / MD / JSON.
 
@@ -130,12 +164,18 @@ def parse_coco(
     reasons (`junk`, `sparse`, `alien`) that also earn a region a second
     reading. Without a resolvable PDF there is no text layer and hence no gap
     to fill, so the OCR pass is skipped along with extraction.
+
+    `region_texts`, an OmniDocBench JSON exported from the same annotations,
+    replaces both: a page whose every region has text there takes it verbatim
+    and reads nothing from the PDF. A page with any region missing from it
+    falls back to the PDF (and `ocr`) for the whole page.
     """
     coco = COCO(str(coco_path))
     images_dir = Path(images_dir) if images_dir else None
     pdfs_dir = Path(pdfs_dir) if pdfs_dir else None
     pdf_path = Path(pdf_path) if pdf_path else None
     only_stem = pdf_path.stem if pdf_path is not None else None
+    known_texts = load_region_texts(region_texts, coco) if region_texts else None
 
     # Group COCO image entries by source-document stem.
     by_stem: dict[str, list[tuple[int, int]]] = {}  # stem → [(page_no, image_id)]
@@ -174,6 +214,7 @@ def parse_coco(
                 regions = [
                     {
                         "region_id": str(uuid.uuid4()),
+                        "ann_id": a["id"],
                         "label": coco.cats[a["category_id"]]["name"],
                         "bbox_norm_1000": _bbox_to_norm_1000(a["bbox"], img_w, img_h),
                         "score": a.get("score"),
@@ -184,7 +225,9 @@ def parse_coco(
                 page_image = _load_page_image(images_dir, info["file_name"], stem_pdf, page_no, dpi)
                 regions = _order_regions(regions, anns, order, page_image, page_no, stem)
 
-                if pdf is not None and page_no < len(pdf.pages):
+                if known_texts is not None and all(r["ann_id"] in known_texts for r in regions):
+                    texts = {r["region_id"]: known_texts[r["ann_id"]] for r in regions}
+                elif pdf is not None and page_no < len(pdf.pages):
                     texts = extract_text_for_page(pdf, page_no, regions, img_w, img_h)
                     if ocr is not None:
                         fill_failed_regions(

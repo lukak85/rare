@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from dataclasses import dataclass
 
 from rare.doc.schema import Article, GlasanaDocument, TextItem
 from rare.link.articles import header_tokens
@@ -116,19 +117,36 @@ def article_text(
     damaged to yield a single content word is left out — it would cost tokens
     and say nothing.
     """
+    texts = [
+        item.text
+        for item in (doc.items.get(item_id) for item_id in article.item_ids)
+        if isinstance(item, TextItem)
+    ]
+    return compose_article_text(article.section, texts, max_chars, include_section)
+
+
+def compose_article_text(
+    section: str | None,
+    texts: list[str],
+    max_chars: int,
+    include_section: bool = False,
+) -> str:
+    """`article_text` from its parts: the section header and item texts in order.
+
+    Split out so an article read from `{stem}_articles.json` — which carries
+    its items' text inline but is no `GlasanaDocument` — reaches the classifier
+    as exactly the string the linking pass would have sent.
+    """
     parts: list[str] = []
     if include_section: #and header_tokens(article.section):
-        parts.append(f"Rubrika: {(article.section or '').strip()}")
+        parts.append(f"Rubrika: {(section or '').strip()}")
     # if article.title.strip():
     #    parts.append(f"Naslov: {(article.title  or '').strip()}")
     parts.append("Besedilo: ")
 
     budget = max_chars - sum(len(part) for part in parts)
-    for item_id in article.item_ids:
-        item = doc.items.get(item_id)
-        if not isinstance(item, TextItem):
-            continue
-        text = (item.text or "").strip()
+    for text in texts:
+        text = (text or "").strip()
         if not text:
             continue
         if budget - len(text) < 0 and parts:
@@ -176,38 +194,69 @@ def classify_articles(
     if classifier is None and not fallback:
         return 0
 
-    classes = list(getattr(classifier, "classes", []) or []) or None
     classified = 0
     from_section = 0
 
     for article in doc.articles.values():
-        label = None
-
-        if classifier is not None:
-            text = article_text(
+        text = (
+            article_text(
                 doc,
                 article,
                 config.classify_max_chars,
                 config.classify_include_section,
             )
-            # Too short to read a genre off: the fallback below may still know.
-            if len(text) >= _MIN_CHARS:
-                try:
-                    label = _match_label(classifier.classify(text), classes)
-                except Exception as exc:  # noqa: BLE001 — one article must not fail the parse
-                    logger.warning(
-                        "classification failed for %s: %s", article.article_id, exc
-                    )
+            if classifier is not None
+            else ""
+        )
+        prediction = predict_genre(
+            text, article.section, classifier, config, article.article_id
+        )
 
-        if not label and fallback:
-            label = genre_for_section(article.section, classes)
-            if label:
-                from_section += 1
-
-        if label:
-            article.genre = label
+        if prediction.source == "section":
+            from_section += 1
+        if prediction.label:
+            article.genre = prediction.label
             classified += 1
 
     if from_section:
         logger.info("took the genre from the section header for %d articles", from_section)
     return classified
+
+
+@dataclass
+class GenrePrediction:
+    label: str | None
+    source: str | None       # "classifier", "section", or None when neither gave one
+    reply: str | None        # the backend's raw answer, when it was asked
+
+
+def predict_genre(
+    text: str,
+    section: str | None,
+    classifier,
+    config: LinkConfig,
+    article_id: str | None = None,
+) -> GenrePrediction:
+    """The genre one article gets: the classifier's answer, else its section's.
+
+    `text` is what `article_text` built. Shared by `classify_articles` and the
+    article-genre evaluation, so the score is of exactly this decision.
+    """
+    classes = list(getattr(classifier, "classes", []) or []) or None
+    reply = None
+
+    # Too short to read a genre off: the fallback below may still know.
+    if classifier is not None and len(text) >= _MIN_CHARS:
+        try:
+            reply = classifier.classify(text)
+            label = _match_label(reply, classes)
+            if label:
+                return GenrePrediction(label, "classifier", reply)
+        except Exception as exc:  # noqa: BLE001 — one article must not fail the parse
+            logger.warning("classification failed for %s: %s", article_id, exc)
+
+    if config.classify_section_fallback:
+        label = genre_for_section(section, classes)
+        if label:
+            return GenrePrediction(label, "section", reply)
+    return GenrePrediction(None, None, reply)

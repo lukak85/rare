@@ -6,10 +6,17 @@ fills in the relationships that need that wider context:
 
 1. `entities.annotate`        — named entities on every text item
 2. `figure_matching.link_captions` — caption/photo-credit -> figure (geometry)
-3. `articles.rebuild`         — articles made authoritative, ordered, dated
+3. `segment.segment_articles` — articles run headline to headline, cut again
+                                 where the running header changes
+   `articles.rebuild`         — articles made authoritative, ordered, dated
 4. `split.split_section_changes` — an article stops where its section does
 5. `split.split_columns`      — a column of short pieces becomes one each
 6. `crosspage.merge_continuations` — a piece split across pages becomes one
+
+With `LinkConfig.segment_on_headline_and_header` (the default) step 3 is the
+whole of article grouping and steps 4–6 are skipped: only a Headline or a new
+running header starts an article, so there is nothing for them to split or
+merge. Turning it off restores the seed grouping refined by 4–6.
 7. `figure_link.link_figures` — figure + its caption -> article (geometry+NER)
 8. `entities.cross_link`      — items sharing a rare entity, across articles
 9. `classify.classify_articles` — editorial genre per finished article
@@ -37,6 +44,7 @@ from rare.link import (
     entities,
     figure_link,
     figure_matching,
+    segment,
     split,
 )
 from rare.link.config import LinkConfig
@@ -65,24 +73,17 @@ def link_document(
     linked_captions = figure_matching.link_captions(doc, cfg)
 
     index = entities.EntityIndex(doc, cfg)
+    if cfg.segment_on_headline_and_header:
+        segment.segment_articles(doc, cfg)
     articles.rebuild(doc, index, cfg)
 
-    # Two ways an article holds more than one piece, coarse before fine: it ran
-    # on past the end of its section, and it is a column of short pieces. Both
-    # need a `rebuild` afterwards, to give the new pieces their page spans and
-    # their own section, and to drop an article left with nothing of its own.
-    sections = split.split_section_changes(doc, cfg)
-    if sections:
-        articles.rebuild(doc, index, cfg)
-
-    pieces = split.split_columns(doc, cfg)
-    if pieces:
-        articles.rebuild(doc, index, cfg)
+    sections = pieces = merged = 0
+    if not cfg.segment_on_headline_and_header:
+        sections, pieces, merged = _split_and_merge(doc, index, cfg)
 
     # Rebuild the index once articles are settled: entity rarity is measured
     # per article, so it is only meaningful after grouping is cleaned up.
     index = entities.EntityIndex(doc, cfg)
-    merged = crosspage.merge_continuations(doc, index, cfg)
 
     # Articles are settled, so the article a figure is given here is the one it
     # will render under. `rebuild` afterwards folds the moved visuals into
@@ -110,3 +111,24 @@ def link_document(
         len(doc.articles),
     )
     return doc
+
+
+def _split_and_merge(
+    doc: GlasanaDocument, index: "entities.EntityIndex", cfg: LinkConfig
+) -> tuple[int, int, int]:
+    """The seed-grouping refinements: section split, column split, continuation merge."""
+    # Two ways an article holds more than one piece, coarse before fine: it ran
+    # on past the end of its section, and it is a column of short pieces. Both
+    # need a `rebuild` afterwards, to give the new pieces their page spans and
+    # their own section, and to drop an article left with nothing of its own.
+    sections = split.split_section_changes(doc, cfg)
+    if sections:
+        articles.rebuild(doc, index, cfg)
+
+    pieces = split.split_columns(doc, cfg)
+    if pieces:
+        articles.rebuild(doc, index, cfg)
+
+    index = entities.EntityIndex(doc, cfg)
+    merged = crosspage.merge_continuations(doc, index, cfg)
+    return sections, pieces, merged

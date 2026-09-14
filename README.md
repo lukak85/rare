@@ -137,12 +137,14 @@ rare evaluate --track figure-link --dataset glasbena_mladina \
     --pdfs-dir datasets/glasbena_mladina/pdfs/eval
 ```
 
-#### Page type vs article genre (`--track page-genre`)
+#### Article genre (`--track article-genre`)
 
-Compares annotation of `page_type` to the `genre` determined by the classifier. Currently supported types (in alignment
-with selected page types):
+Compares the `genre` the classifier gives each article with a ground-truth genre, over ground-truth articles.
 
-| Page type          | Expected genre              |
+Ground-truth genres are derived from the annotated `page_type` of the pages an article touches. An article gets a genre
+when all of its pages that name one agree; otherwise `genre` is left `null` for manual labelling.
+
+| Page type          | Genre                       |
 |--------------------|-----------------------------|
 | `ArticlePage`      | `članek`                    |
 | `NewsPage`         | `novice`                    |
@@ -155,22 +157,13 @@ with selected page types):
 | `TOCPage`          | `kazalo`                    |
 | `AdvertPage`       | `reklama`                   |
 | `CoverPage`        | `naslovnica`                |
-| `SpecialPage`      | *not scored* (manual check) |
-| `FrontPage`        | *not scored*                |
-| `BackPage`         | *not scored*                |
 
 ```bash
-rare evaluate --track page-genre --classification gams \
-    --dataset glasbena_mladina \
-    --pdfs-dir datasets/glasbena_mladina/pdfs/eval
+rare evaluate --track article-genre --classification gams \
+    --dataset glasbena_mladina
 ```
 
-Currently, because a page can hold pieces of several genres, evaluation consists of two main results:
-1. `accuracy_dominant` (the  article holding most of the page has the expected genre, the way the pages were annotated
-in the first place)
-2. `accuracy_any` (some article on the page does)
-
-`page_genre_summary.json` holds the **confusion matrix** of page type against the predicted genres.
+Reported are `macro_f1` and `micro_f1`. 
 
 </details>
 
