@@ -681,14 +681,14 @@ control and checking of calculations):
 |---------------------|-------------------------|------------------|-------------------|
 | DeepSeekOCR-2       | -                       | 0.188            | 0.115             |
 | Docling             | Default                 | 0.0664           | 0.164             |
-| dots.ocr            | dots.mocr               | <ins>0.348</ins> | **0.0765**        |
+| dots.ocr            | dots.mocr               | <ins>0.348</ins> | **0.0722**        |
 | Dolphin             | Dolphinv2               | 0.0542           | 0.0896            |
 | GLM-OCR             | GLM-4V                  | 0.1379*          | 0.1941*           |
 | Marker              | Default                 | 0.0416           | 0.1033            |
 | MinerU              | MinerU2.5-Pro-2604-1.2B | 0.181            | 0.137             |
 | Nemotron-Parse-v1.2 | -                       | 0.0686           | 0.0914            |
 | PaddleOCR           | PaddleOCR-VL-1.6        | 0.115            | 0.170             |
-| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0306**       | <ins>0.0874</ins> |
+| Youtu-Parsing       | Youtu-LLM-2B-Base       | **0.0306**       | <ins>0.0835</ins> |
 
 \* Only results successfully parsed were scored against ground truth.
 
@@ -720,24 +720,23 @@ Comparison of the best performing VLMs compared to our implementation, given wit
 
 Text = text blocks, Order = reading order.
 
-| Page type          | YP: Text  | YP: Order | Marker: Text | Marker: Order | dots.ocr: Text | dots.ocr: Order | DLY+LR+OCR: Text | DLY+LR+OCR: Order |
-|--------------------|-----------|-----------|--------------|---------------|----------------|-----------------|------------------|-------------------|
-| Advert             | 0.048     | 0.104     | 0.113        | 0.174         | 0.038          | 0.059           | 0.216            | 0.236             |
-| Article            | 0.023     | 0.069     | 0.024        | 0.090         | 0.025          | 0.061           | 0.029            | 0.163             |
-| Cover              | 0.009     | 0.125     | 0.052        | 0.125         | 0.026          | 0.000           | 0.012            | 0.125             |
-| Events             | 0.055     | 0.248     | 0.136        | 0.266         | 0.037          | 0.229           | 0.438            | 0.450             |
-| Images             | 0.172     | 0.092     | 0.401        | 0.192         | 0.185          | 0.083           | 0.370            | 0.253             |
-| Interview          | 0.022     | 0.078     | 0.032        | 0.101         | 0.023          | 0.074           | 0.015            | 0.156             |
-| Letters            | 0.020     | 0.050     | 0.015        | 0.075         | 0.034          | 0.065           | 0.017            | 0.185             |
-| News               | 0.020     | 0.093     | 0.021        | 0.103         | 0.022          | 0.064           | 0.042            | 0.221             |
-| Quiz               | 0.058     | 0.068     | 0.080        | 0.102         | 0.089          | 0.070           | 0.115            | 0.303             |
-| Records            | 0.017     | 0.110     | 0.015        | 0.084         | 0.032          | 0.071           | 0.047            | 0.227             |
-| Special            | 0.175     | 0.186     | 0.222        | 0.297         | 0.145          | 0.201           | 0.345            | 0.427             |
-| TOC                | 0.058     | 0.145     | 0.061        | 0.151         | 0.049          | 0.146           | 0.089            | 0.307             |
-| Unknown            | 0.038     | 0.073     | 0.063        | 0.096         | 0.067          | 0.117           | 0.130            | 0.192             |
-| **All (page avg)** | **0.031** | **0.084** | **0.042**    | **0.103**     | **0.035**      | **0.072**       | **0.059**        | **0.198**         |
-| All (whole)        | 0.025     | 0.081     | 0.028        | 0.099         | 0.029          | 0.068           | 0.041            | 0.214             |
-| All (sample avg)   | 0.039     | 0.084     | 0.055        | 0.103         | 0.043          | 0.072           | 0.053            | 0.198             |
+| Page type          | YP: Text  | YP: Order | Marker: Text | Marker: Order | dots.ocr: Text | dots.ocr: Order | DLY+LR: Text | DLY+LR: Order |
+|--------------------|-----------|-----------|--------------|---------------|----------------|-----------------|--------------|---------------|
+| Advert             | 0.048     | 0.104     | 0.113        | 0.174         | 0.038          | 0.059           | 0.215        | 0.231         |
+| Article            | 0.024     | 0.068     | 0.024        | 0.089         | 0.025          | 0.060           | 0.032        | 0.162         |
+| Cover              | 0.010     | 0.194     | 0.035        | 0.194         | 0.020          | 0.111           | 0.011        | 0.194         |
+| Events             | 0.050     | 0.225     | 0.123        | 0.242         | 0.035          | 0.208           | 0.400        | 0.412         |
+| Images             | 0.172     | 0.092     | 0.401        | 0.192         | 0.185          | 0.083           | 0.417        | 0.314         |
+| Interview          | 0.022     | 0.075     | 0.033        | 0.097         | 0.023          | 0.071           | 0.028        | 0.159         |
+| Letters            | 0.020     | 0.050     | 0.015        | 0.075         | 0.034          | 0.065           | 0.016        | 0.183         |
+| News               | 0.020     | 0.092     | 0.021        | 0.102         | 0.023          | 0.066           | 0.043        | 0.223         |
+| Quiz               | 0.054     | 0.068     | 0.075        | 0.102         | 0.109          | 0.097           | 0.104        | 0.254         |
+| Records            | 0.017     | 0.110     | 0.015        | 0.084         | 0.032          | 0.071           | 0.047        | 0.221         |
+| Special            | 0.167     | 0.218     | 0.281        | 0.351         | 0.139          | 0.231           | 0.404        | 0.427         |
+| TOC                | 0.056     | 0.144     | 0.058        | 0.149         | 0.047          | 0.144           | 0.084        | 0.297         |
+| **All (page avg)** | **0.031** | **0.084** | **0.042**    | **0.103**     | **0.035**      | **0.072**       | **0.061**    | **0.197**     |
+| All (whole)        | 0.025     | 0.081     | 0.028        | 0.099         | 0.029          | 0.068           | 0.041        | 0.212         |
+| All (sample avg)   | 0.039     | 0.084     | 0.055        | 0.103         | 0.043          | 0.072           | 0.055        | 0.197         |
 
 *YP = Youtu-Parsing, DLY+LR = DocLayout-YOLO + LayoutReader.*
 
@@ -750,13 +749,13 @@ extractions), the text block NED is not directly comparable to the other VLMs, b
 Ablation study, scores figures, captions and figure bylines correctly linked to their respective articles using proximity,
 NER and additional heuristics.
 
-| Variant    | Description             | Accuracy (%) |
-|------------|-------------------------|-------------:|
-| `full`     | Full heuristic pipeline |        82.63 |
-| `geometry` | Geometry only           |        82.78 |
-| `ner`      | NER only                |        16.01 |
-| `nearest`  | Nearest anchor          |        83.65 |
-| `mean`     | Mean distance           |        52.79 |
+| Variant               | Description                                                 | Accuracy (%) |
+|-----------------------|-------------------------------------------------------------|-------------:|
+| `full`                | Proximity (nearest element, above/left preferred) + NER     |        82.63 |
+| `no-ner`              | Proximity only                                              |        82.78 |
+| `no-geometry`         | NER only                                                    |        16.01 |
+| `no-ner-no-direction` | Proximity only, without the above/left preference           |        83.65 |
+| `mean-distance`       | `full`, with mean instead of nearest distance to an article |        52.79 |
 
 
 ### Classification results

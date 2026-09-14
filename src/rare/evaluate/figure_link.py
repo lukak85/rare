@@ -36,13 +36,14 @@ OUTCOMES = (
 )
 
 # The config variants scored side by side. `full` is whatever the caller
-# configured; the rest isolate one signal each, and `nearest` is the baseline
+# configured; each other name says what it removes or changes relative to it,
+# and `no-ner-no-direction` (plain nearest-element proximity) is the baseline
 # every heuristic here has to beat to justify itself.
 VARIANTS: dict[str, dict] = {
     "full": {},
-    "geometry": {"figure_link_ner_weight": 0.0},
-    "ner": {"figure_link_geometry_weight": 0.0},
-    "nearest": {
+    "no-ner": {"figure_link_ner_weight": 0.0},
+    "no-geometry": {"figure_link_geometry_weight": 0.0},
+    "no-ner-no-direction": {
         "figure_link_geometry_weight": 1.0,
         "figure_link_ner_weight": 0.0,
         "figure_link_below_penalty": 1.0,
@@ -52,7 +53,7 @@ VARIANTS: dict[str, dict] = {
     # (nearest) lets an article that wraps around the page beat the short piece
     # directly above a photo, because one of its many columns is always a few
     # pixels away; the mean asks which article actually surrounds the figure.
-    "mean": {"figure_link_use_mean": True},
+    "mean-distance": {"figure_link_use_mean": True},
 }
 
 

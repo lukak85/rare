@@ -859,7 +859,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument(
         "--variants",
         help="figure-link track: comma-separated config variants to score side by "
-             "side (default: full,geometry,ner,nearest — see "
+             "side (default: full,no-ner,no-geometry,no-ner-no-direction,mean-distance — see "
              "rare.evaluate.figure_link.VARIANTS).",
     )
     p_eval.add_argument(
