@@ -20,3 +20,9 @@ __pycache__/
 build/
 dist/
 /.backup/
+
+# API configs holding real keys (the *Example.json siblings are tracked)
+configs/gpt/json/configGpt.json
+configs/gemini/json/configGemini.json
+configs/claude/json/configOpus.json
+configs/claude/json/configFable.json
