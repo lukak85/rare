@@ -443,9 +443,13 @@ def _evaluate_article_genre(args: argparse.Namespace) -> int:
         config=_read_config(getattr(args, "link_config", None)),
         limit=args.limit,
         dataset_name=args.dataset,
+        sample=args.sample,
+        seed=args.seed,
+        ids_path=args.article_ids,
     )
     print(f"\nAggregates: {json.dumps(summary['overall'], indent=2)}")
     print(f"Prediction sources: {summary['prediction_sources']}")
+    print(f"Articles scored: {run_dir / 'article_ids.json'}")
     print(f"Report: {run_dir / 'report.md'}")
     return 0
 
@@ -786,6 +790,26 @@ def build_parser() -> argparse.ArgumentParser:
     # predicted markdown is scored. Predictions only — see `rare.evaluate.pdf_text`.
     _add_ocr_flags(p_eval)
     p_eval.add_argument("--limit", type=int, help="Cap number of samples (for smoke tests).")
+    p_eval.add_argument(
+        "--sample",
+        type=int,
+        help="article-genre track: score this many labelled articles drawn at random "
+             "(with --seed) instead of all of them.",
+    )
+    p_eval.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="article-genre track: random seed for --sample (default: 0).",
+    )
+    p_eval.add_argument(
+        "--article-ids",
+        dest="article_ids",
+        help="article-genre track: JSON of article ids to score. If it exists, exactly "
+             "those articles are scored, so models compare on the same set; if not, "
+             "the --sample draw is written to it. Every run also writes "
+             "<run>/article_ids.json in the same form.",
+    )
     p_eval.add_argument("--start", type=int, help="Start index for evaluating samples.")
     p_eval.add_argument(
         "--emit-omnidocbench",

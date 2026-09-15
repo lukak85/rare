@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterator, Optional, Union
@@ -309,6 +310,66 @@ def _averages(per_genre: dict[str, dict], correct: int, predicted: int, scored: 
     }
 
 
+ARTICLE_IDS_FILE = "article_ids.json"
+
+
+def select_articles(
+    labelled: list[tuple[str, dict]],
+    sample: Optional[int] = None,
+    seed: int = 0,
+    ids_path: str | Path | None = None,
+) -> list[tuple[str, dict]]:
+    """The `(stem, article)` pairs to score, in their order in `labelled`.
+
+    An existing `ids_path` decides: exactly the articles it lists. IDs it names
+    that are no longer in the ground truth — a re-parse gives articles new ids —
+    are warned about rather than silently dropped from the comparison. Without
+    one, `sample` draws that many at random with `seed`, and writes the draw to
+    `ids_path` when given, so the next model is scored on the same articles.
+    """
+    if ids_path is not None and Path(ids_path).exists():
+        wanted = [a["article_id"] for a in json.loads(Path(ids_path).read_text())["articles"]]
+        by_id = {article["article_id"]: (stem, article) for stem, article in labelled}
+        missing = [aid for aid in wanted if aid not in by_id]
+        if missing:
+            logger.warning(
+                "%d of the %d articles in %s are not labelled in the ground truth "
+                "(re-parsed, or unlabelled since); scoring the other %d",
+                len(missing), len(wanted), ids_path, len(wanted) - len(missing),
+            )
+        keep = {aid for aid in wanted if aid in by_id}
+        return [pair for pair in labelled if pair[1]["article_id"] in keep]
+
+    if sample is None or sample >= len(labelled):
+        chosen = list(labelled)
+    else:
+        picked = set(random.Random(seed).sample(range(len(labelled)), sample))
+        chosen = [pair for n, pair in enumerate(labelled) if n in picked]
+    if ids_path is not None:
+        write_article_ids(ids_path, chosen, None, sample, seed)
+    return chosen
+
+
+def write_article_ids(
+    path: str | Path,
+    chosen: list[tuple[str, dict]],
+    gt_dir: str | Path | None,
+    sample: Optional[int],
+    seed: int,
+) -> None:
+    """Record which articles were scored, in the form `select_articles` reads back."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps({
+        "source": str(gt_dir) if gt_dir is not None else None,
+        "sample": sample,
+        "seed": seed,
+        "articles": [
+            {"pdf_stem": stem, "article_id": article["article_id"], "true_genre": article["genre"]}
+            for stem, article in chosen
+        ],
+    }, ensure_ascii=False, indent=2))
+
+
 def run_article_genre(
     gt_dir: str | Path,
     run_dir: str | Path,
@@ -316,8 +377,17 @@ def run_article_genre(
     config: dict | LinkConfig | None = None,
     limit: Optional[int] = None,
     dataset_name: str = "",
+    sample: Optional[int] = None,
+    seed: int = 0,
+    ids_path: str | Path | None = None,
 ) -> dict:
-    """Classify every labelled article in `gt_dir` and score it. Returns the summary.
+    """Classify the labelled articles in `gt_dir` and score them. Returns the summary.
+
+    Which articles: those listed in `ids_path` when that file exists — so every
+    model is scored on the same articles and their macro and micro F1 compare —
+    else `sample` of them drawn at random with `seed` (written to `ids_path`
+    when one is given), else all. The articles scored are always written to
+    `article_ids.json` in the run directory too, which `ids_path` accepts.
 
     Writes `article_genre_summary.json` (totals, per genre, confusion matrix),
     `article_genre_articles.jsonl` (one row per scored article, with the
@@ -334,6 +404,7 @@ def run_article_genre(
     sources: Counter = Counter()
     unlabelled = documents = 0
 
+    labelled: list[tuple[str, dict]] = []
     for stem, payload in load_ground_truth(gt_dir):
         if limit and documents >= limit:
             break
@@ -341,38 +412,43 @@ def run_article_genre(
         for article in payload["articles"]:
             if not article.get("article_id"):
                 continue
-            truth = article.get("genre")
-            if not truth:
+            if article.get("genre"):
+                labelled.append((stem, article))
+            else:
                 unlabelled += 1
-                continue
 
-            text = compose_article_text(
-                article.get("section"),
-                [item.get("text", "") for item in article["items"]],
-                cfg.classify_max_chars,
-                cfg.classify_include_section,
-            )
-            prediction = predict_genre(
-                text if classifier is not None else "",
-                article.get("section"),
-                classifier,
-                cfg,
-                article["article_id"],
-            )
-            confusion[(truth, prediction.label or "∅")] += 1
-            sources[prediction.source or "none"] += 1
-            rows.append({
-                "pdf_stem": stem,
-                "article_id": article["article_id"],
-                "title": article.get("title", ""),
-                "page_nos": article["page_nos"],
-                "genre_source": article.get("genre_source"),
-                "true_genre": truth,
-                "predicted_genre": prediction.label,
-                "prediction_source": prediction.source,
-                "correct": prediction.label == truth,
-                "reply": prediction.reply,
-            })
+    chosen = select_articles(labelled, sample, seed, ids_path)
+    write_article_ids(run_dir / ARTICLE_IDS_FILE, chosen, gt_dir, sample, seed)
+
+    for stem, article in chosen:
+        truth = article["genre"]
+        text = compose_article_text(
+            article.get("section"),
+            [item.get("text", "") for item in article["items"]],
+            cfg.classify_max_chars,
+            cfg.classify_include_section,
+        )
+        prediction = predict_genre(
+            text if classifier is not None else "",
+            article.get("section"),
+            classifier,
+            cfg,
+            article["article_id"],
+        )
+        confusion[(truth, prediction.label or "∅")] += 1
+        sources[prediction.source or "none"] += 1
+        rows.append({
+            "pdf_stem": stem,
+            "article_id": article["article_id"],
+            "title": article.get("title", ""),
+            "page_nos": article["page_nos"],
+            "genre_source": article.get("genre_source"),
+            "true_genre": truth,
+            "predicted_genre": prediction.label,
+            "prediction_source": prediction.source,
+            "correct": prediction.label == truth,
+            "reply": prediction.reply,
+        })
 
     scored = len(rows)
     predicted = sum(1 for row in rows if row["predicted_genre"])
@@ -397,6 +473,7 @@ def run_article_genre(
         "model": model,
         "source": str(gt_dir),
         "documents": documents,
+        "sample": {"size": sample, "seed": seed, "ids": str(ids_path) if ids_path else None},
         "overall": overall,
         "prediction_sources": dict(sources),
         "per_genre": per_genre,

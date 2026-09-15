@@ -48,7 +48,7 @@ class GPTClassification:
         prompt = (
             f"Izmed podanih kategorij za sledeče besedilo izberi eno izmed kategorij: "
             f"{', '.join(self.classes)}. Odgovori samo z imenom kategorije.\n"
-            f"Besedilo: {text}"
+            f"{text}"
         )
 
         async with session.post(
