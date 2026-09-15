@@ -94,6 +94,7 @@ incorrect OCR, which we correct using the following flags:
 #### Classification
 
 Final articles are classified by passing in `--classification <classifier>` (default: `gams`).
+`--classification heuristic` takes the genre from the article's running header and uses a map to determine its class.
 
 </details>
 
