@@ -133,7 +133,7 @@ class LinkConfig:
     classify_include_section: bool = True
     # …and fall back on it when the classifier says nothing usable, or when a
     # piece is too short to classify at all.
-    classify_section_fallback: bool = True
+    classify_section_fallback: bool = False
 
     @classmethod
     def from_dict(cls, config: dict | None) -> "LinkConfig":
