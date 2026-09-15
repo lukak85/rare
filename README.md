@@ -755,11 +755,11 @@ NER and additional heuristics.
 
 Number of correctly classified articles.
 
-| Model      | Type          | Macro F1 | Micro F1 |
-|------------|---------------|----------|----------|
-| Heuristics | _Header name_ | -        | -        |
-| GAMS       | Instruct-12B  | -        | -        |
-| ChatGPT    | GPT 5.5       | 0.4549   | 0.5478   |
+| Model      | Type          | Macro F1   | Micro F1   |
+|------------|---------------|------------|------------|
+| Heuristics | _Header name_ | -          | -          |
+| GAMS       | 12B-Instruct  | 0.3112     | 0.5289     |
+| ChatGPT    | GPT 5.5       | **0.4549** | **0.5478** |
 
 
 # Demo
