@@ -296,12 +296,17 @@ def _f1(precision: float, recall: float) -> float:
 
 def _averages(per_genre: dict[str, dict], correct: int, predicted: int, scored: int) -> dict:
     n = len(per_genre)
-    macro = {
-        f"macro_{key}": sum(g[key] for g in per_genre.values()) / n if n else 0.0
-        for key in ("precision", "recall", "f1")
-    }
-    micro_precision = correct / predicted if predicted else 0.0
-    micro_recall = correct / scored if scored else 0.0
+    #macro = {
+    #    f"macro_{key}": sum(g[key] for g in per_genre.values()) / n if n else 0.0
+    #    for key in ("precision", "recall", "f1")
+    #}
+    #micro_precision = correct / predicted if predicted else 0.0
+    #micro_recall = correct / scored if scored else 0.0
+
+    macro = f1_score(y_true, y_pred, average="macro")
+    micro = f1_score(y_true, y_pred, average="micro")
+    weighted = f1_score(y_true, y_pred, average="weighted")
+
     return {
         **macro,
         "micro_precision": micro_precision,
@@ -311,6 +316,29 @@ def _averages(per_genre: dict[str, dict], correct: int, predicted: int, scored: 
 
 
 ARTICLE_IDS_FILE = "article_ids.json"
+ARTICLES_FILE = "article_genre_articles.jsonl"
+
+
+def load_scored_articles(path: str | Path) -> dict[str, dict]:
+    """Rows an earlier run of this run dir already scored, by article id.
+
+    Re-running the same `--run-id` picks up where the last one stopped instead of
+    paying for every classification again; delete the file to score from scratch.
+    """
+    if not Path(path).exists():
+        return {}
+    done: dict[str, dict] = {}
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:  # a half-written line from an interrupted run
+            logger.warning("ignoring a malformed line in %s", path)
+            continue
+        if row.get("article_id"):
+            done[row["article_id"]] = row
+    return done
 
 
 def select_articles(
@@ -381,18 +409,6 @@ def run_article_genre(
     seed: int = 0,
     ids_path: str | Path | None = None,
 ) -> dict:
-    """Classify the labelled articles in `gt_dir` and score them. Returns the summary.
-
-    Which articles: those listed in `ids_path` when that file exists — so every
-    model is scored on the same articles and their macro and micro F1 compare —
-    else `sample` of them drawn at random with `seed` (written to `ids_path`
-    when one is given), else all. The articles scored are always written to
-    `article_ids.json` in the run directory too, which `ids_path` accepts.
-
-    Writes `article_genre_summary.json` (totals, per genre, confusion matrix),
-    `article_genre_articles.jsonl` (one row per scored article, with the
-    backend's raw reply), plus the shared `report.md` / `scores.csv`.
-    """
     from rare.evaluate.report import write_report
 
     cfg = config if isinstance(config, LinkConfig) else LinkConfig.from_dict(config)
@@ -420,36 +436,55 @@ def run_article_genre(
     chosen = select_articles(labelled, sample, seed, ids_path)
     write_article_ids(run_dir / ARTICLE_IDS_FILE, chosen, gt_dir, sample, seed)
 
-    for stem, article in chosen:
-        truth = article["genre"]
-        text = compose_article_text(
-            article.get("section"),
-            [item.get("text", "") for item in article["items"]],
-            cfg.classify_max_chars,
-            cfg.classify_include_section,
-        )
-        prediction = predict_genre(
-            text if classifier is not None else "",
-            article.get("section"),
-            classifier,
-            cfg,
-            article["article_id"],
-        )
-        confusion[(truth, prediction.label or "∅")] += 1
-        sources[prediction.source or "none"] += 1
-        rows.append({
-            "pdf_stem": stem,
-            "article_id": article["article_id"],
-            "title": article.get("title", ""),
-            "page_nos": article["page_nos"],
-            "genre_source": article.get("genre_source"),
-            "true_genre": truth,
-            "predicted_genre": prediction.label,
-            "prediction_source": prediction.source,
-            "correct": prediction.label == truth,
-            "reply": prediction.reply,
-        })
+    scored = load_scored_articles(run_dir / ARTICLES_FILE)
+    reused = 0
+    # Appended to as each article is scored, so an interrupted run keeps its work.
+    with open(run_dir / ARTICLES_FILE, "a") as fh:
+        for stem, article in chosen:
+            truth = article["genre"]
+            row = scored.get(article["article_id"])
+            if row is None:
+                text = compose_article_text(
+                    article.get("section"),
+                    [item.get("text", "") for item in article["items"]],
+                    cfg.classify_max_chars,
+                    cfg.classify_include_section,
+                )
+                prediction = predict_genre(
+                    text if classifier is not None else "",
+                    article.get("section"),
+                    classifier,
+                    cfg,
+                    article["article_id"],
+                    article.get("title"),
+                )
+                row = {
+                    "pdf_stem": stem,
+                    "article_id": article["article_id"],
+                    "title": article.get("title", ""),
+                    "page_nos": article["page_nos"],
+                    "genre_source": article.get("genre_source"),
+                    "true_genre": truth,
+                    "predicted_genre": prediction.label,
+                    "prediction_source": prediction.source,
+                    "correct": prediction.label == truth,
+                    "reply": prediction.reply,
+                }
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                fh.flush()
+            else:
+                reused += 1
+            confusion[(row["true_genre"], row["predicted_genre"] or "∅")] += 1
+            sources[row["prediction_source"] or "none"] += 1
+            rows.append(row)
 
+    if reused:
+        logger.info(
+            "reused %d of %d predictions from %s; delete it to score from scratch",
+            reused, len(chosen), run_dir / ARTICLES_FILE,
+        )
+
+    '''
     scored = len(rows)
     predicted = sum(1 for row in rows if row["predicted_genre"])
     correct = sum(1 for row in rows if row["correct"])
@@ -479,14 +514,27 @@ def run_article_genre(
         "per_genre": per_genre,
         "confusion": {k: dict(v) for k, v in sorted(matrix.items())},
     }
+    '''
+
+    y_true = [row["true_genre"] if row["true_genre"] is not None else 'x' for row in rows]
+    y_pred = [row["predicted_genre"] if row["predicted_genre"] is not None else 'y' for row in rows]
+
+    print(y_true)
+    print(y_pred)
+
+    from sklearn.metrics import f1_score, classification_report
+    summary = {
+        "macro_f1": f1_score(y_true, y_pred, average="macro"),
+        "micro_f1": f1_score(y_true, y_pred, average="micro"),
+        "weighted_f1": f1_score(y_true, y_pred, average="weighted")
+    }
+    print(classification_report(y_true, y_pred))
+    print(summary)
+    quit()
 
     (run_dir / "article_genre_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2)
     )
-    with open(run_dir / "article_genre_articles.jsonl", "w") as fh:
-        for row in rows:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-
     write_report(
         run_dir,
         track="article-genre",

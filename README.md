@@ -94,7 +94,7 @@ incorrect OCR, which we correct using the following flags:
 #### Classification
 
 Final articles are classified by passing in `--classification <classifier>` (default: `gams`).
-`--classification heuristic` takes the genre from the article's running header and uses a map to determine its class.
+`--classification heuristic` takes the genre from the article's running header, else its title, and uses a map to determine its class.
 
 </details>
 
@@ -756,11 +756,11 @@ NER and additional heuristics.
 
 Number of correctly classified articles.
 
-| Model      | Type          | Macro F1   | Micro F1   |
-|------------|---------------|------------|------------|
-| Heuristics | _Header name_ | -          | -          |
-| GAMS       | 12B-Instruct  | 0.3112     | 0.5289     |
-| ChatGPT    | GPT 5.5       | **0.4549** | **0.5478** |
+| Model      | Type          | Macro F1   | Micro F1   | Weighted F1 | Accuracy |
+|------------|---------------|------------|------------|-------------|----------|
+| Heuristics | _Header name_ | 0.3083     | 0.1920     | 0.2658      | 0.19     |
+| GAMS       | 12B-Instruct  | 0.3112     | 0.5289     |             |          |
+| ChatGPT    | GPT 5.5       | **0.3791** | **0.5375** | 0.5343      | 0.54     |
 
 
 # Demo

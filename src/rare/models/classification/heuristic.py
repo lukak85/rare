@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-import re
-
 from rare.link.classify import SECTION_TO_GENRE, genre_for_section
 from rare.models.registry import register
-
-_SECTION_LINE = re.compile(r"^Rubrika:(.*)$", re.MULTILINE)
 
 
 @register("classification", "heuristic")
 class HeuristicClassification:
+    reads_headers = True
 
     def __init__(self, config: dict | None = None):
         cfg = dict(config or {})
         self.classes = list(cfg.get("classes") or sorted(set(SECTION_TO_GENRE.values())))
 
-    def classify(self, text: str) -> str:
-        match = _SECTION_LINE.search(text or "")
-        if not match:
-            return ""
-        return genre_for_section(match.group(1).strip(), self.classes) or ""
+    def classify(self, text: str, section: str | None = None, title: str | None = None) -> str:
+        """The genre the section names, else the one the title names, else ""."""
+        return (
+            genre_for_section(section, self.classes)
+            or genre_for_section(title, self.classes)
+            or ""
+        )

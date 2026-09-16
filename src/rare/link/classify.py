@@ -209,7 +209,7 @@ def classify_articles(
             else ""
         )
         prediction = predict_genre(
-            text, article.section, classifier, config, article.article_id
+            text, article.section, classifier, config, article.article_id, article.title
         )
 
         if prediction.source == "section":
@@ -236,11 +236,13 @@ def predict_genre(
     classifier,
     config: LinkConfig,
     article_id: str | None = None,
+    title: str | None = None,
 ) -> GenrePrediction:
     """The genre one article gets: the classifier's answer, else its section's.
 
     `text` is what `article_text` built. Shared by `classify_articles` and the
-    article-genre evaluation, so the score is of exactly this decision.
+    article-genre evaluation, so the score is of exactly this decision. A
+    backend that sets `reads_headers` is handed the section and title as well.
     """
     classes = list(getattr(classifier, "classes", []) or []) or None
     reply = None
@@ -248,7 +250,10 @@ def predict_genre(
     # Too short to read a genre off: the fallback below may still know.
     if classifier is not None and len(text) >= _MIN_CHARS:
         try:
-            reply = classifier.classify(text)
+            if getattr(classifier, "reads_headers", False):
+                reply = classifier.classify(text, section=section, title=title)
+            else:
+                reply = classifier.classify(text)
             label = _match_label(reply, classes)
             if label:
                 return GenrePrediction(label, "classifier", reply)
