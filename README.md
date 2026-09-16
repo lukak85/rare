@@ -756,11 +756,11 @@ NER and additional heuristics.
 
 Number of correctly classified articles.
 
-| Model      | Type          | Macro F1   | Micro F1   | Weighted F1 | Accuracy |
-|------------|---------------|------------|------------|-------------|----------|
-| Heuristics | _Header name_ | 0.3083     | 0.1920     | 0.2658      | 0.19     |
-| GAMS       | 12B-Instruct  | 0.3112     | 0.5289     |             |          |
-| ChatGPT    | GPT 5.5       | **0.3791** | **0.5375** | 0.5343      | 0.54     |
+| Model      | Type          | Macro F1          | Micro F1          | Weighted F1       | Accuracy        |
+|------------|---------------|-------------------|-------------------|-------------------|-----------------|
+| Heuristics | _Header name_ | <ins>0.3083</ins> | 0.1920            | 0.2658            | 0.19            |
+| GAMS       | 12B-Instruct  | 0.2852            | <ins>0.5161</ins> | <ins>0.4813</ins> | <ins>0.52</ins> |
+| ChatGPT    | GPT 5.5       | **0.3791**        | **0.5375**        | **0.5343**        | **0.54**        |
 
 
 # Demo
