@@ -207,15 +207,7 @@ rare evaluate --track vlm --dataset glasbena_mladina \
 The pipeline track can also run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s layout evaluator, including **mAP**. Pass `--run-omnidocbench`.
 Use `--omnidocbench-image` to override the image.
 
-Before running, clone the [OmniDocBench](https://github.com/opendatalab/OmniDocBench) repository:
-```bash
-git clone https://github.com/opendatalab/OmniDocBench.git
-```
-Switch to `v1_5` branch:
-```bash
-git switch v1_5
-```
-Copy the Dockerfile from [OmnoDocBench-Dockerfile](./OmniDocBench-Dockerfile) to the root of the cloned repository and build the Docker image:
+Inside [OmnoDocBench-Dockerfile](./OmniDocBench-Dockerfile), build the Docker image:
 ```bash
 docker build -t omnidocbench-v15 .
 ```

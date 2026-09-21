@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import torch
 from transformers import pipeline, BitsAndBytesConfig
 
@@ -20,20 +22,20 @@ class GamsClassification:
 
         model_id = cfg.get("model", "cjvt/GaMS3-12B-Instruct")
 
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-        )
-
-        self.model = pipeline(
-            "text-generation",
-            model=model_id,
-            # device_map="auto",
-            model_kwargs={"quantization_config": quant_config},
-            device_map={"": 0},  # force everything onto GPU 0; errors loudly instead of offloading
-            torch_dtype=torch.bfloat16,
-        )
+        try:
+            self.model = pipeline(
+                "text-generation",
+                model=model_id,
+                model_kwargs={
+                    "device_map": "auto",
+                    "torch_dtype": torch.bfloat16,
+    #                "max_memory": {0: "22GiB", 1: "22GiB"},
+                    "attn_implementation": "eager",
+                },
+            )
+        except Exception as e:
+            logging.log(e)
+            return
 
         self.classes = list(cfg.get("classes") or [
             "reklama",
@@ -59,8 +61,15 @@ class GamsClassification:
 
         message = [{"role": "user", "content": prompt}]
 
-        response = self.model(message, max_new_tokens=self.max_new_tokens)
-        return response[0]["generated_text"][-1]["content"]
+        #tok = self.model.tokenizer
+        #ids = tok.apply_chat_template(message, add_generation_prompt=True)
+        #print(self.model.tokenizer.apply_chat_template(message, add_generation_prompt=True, tokenize=False))
+        #exit()
+
+        response = self.model(message, max_new_tokens=self.max_new_tokens, truncation=True)
+        res = response[0]["generated_text"][-1]["content"]
+        # print(res)
+        return res
 
     def classify(self, text: str) -> str:
         """Return the model's reply verbatim.
