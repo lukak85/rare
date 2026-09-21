@@ -1,13 +1,14 @@
 # RaRe LayoutReader reading-order backend.
 #
-# The code in this file is original to RaRe (Apache-2.0), but it is a client of
-# two CC BY-NC-SA 4.0 artefacts by Hantian Pang:
-#   * the inference helpers vendored in `layoutreader_helpers/helpers.py`
-#     (from https://github.com/FreeOCR-AI/layoutreader), and
+# The code in this file is original to RaRe (GPL-3.0-or-later), but it is a
+# client of two CC BY-NC-SA 4.0 artefacts by Hantian Pang, neither of which is
+# redistributed by RaRe:
+#   * the inference helpers from https://github.com/FreeOCR-AI/layoutreader,
+#     downloaded on first use by `layoutreader_helpers`, and
 #   * the `hantian/layoutreader` LayoutLMv3 checkpoint it loads at runtime
 #     (https://huggingface.co/hantian/layoutreader).
-# Running this backend therefore inherits the NonCommercial restriction; see
-# NOTICE and licenses/LICENSE-LAYOUTREADER.
+# Running this backend therefore inherits the NonCommercial restriction on
+# those two artefacts; see NOTICE.
 
 import warnings
 from collections import defaultdict
@@ -25,7 +26,7 @@ from transformers.utils import logging
 import layoutparser as lp
 
 from rare.models.order.builtin import TopBottomBackend
-from rare.models.order.layoutreader_helpers.helpers import prepare_inputs, boxes2inputs, parse_logits, MAX_LEN
+from rare.models.order.layoutreader_helpers import load_helpers
 from rare.models.registry import register
 
 ORDER_EXCLUDE = frozenset({
@@ -309,20 +310,22 @@ class LayoutReaderBackend:
         boxes_pts = [l["bbox"] for l in lines]  # for drawing
         boxes = [normalize_bbox(b, page_w, page_h) for b in boxes_pts]  # for model
 
-        max_boxes = MAX_LEN - 2
+        helpers = load_helpers()
+
+        max_boxes = helpers.MAX_LEN - 2
         if len(boxes) > max_boxes:
             lines = lines[:max_boxes]
             boxes_pts = boxes_pts[:max_boxes]
             boxes = boxes[:max_boxes]
 
-        inputs = boxes2inputs(boxes)
-        inputs = prepare_inputs(inputs, self._get_model())
+        inputs = helpers.boxes2inputs(boxes)
+        inputs = helpers.prepare_inputs(inputs, self._get_model())
 
         with torch.no_grad():
             logits = self._get_model()(**inputs).logits.cpu().squeeze(0)
 
         # orders[k] = index of the box that is k-th in reading order.
-        orders = parse_logits(logits, len(boxes))
+        orders = helpers.parse_logits(logits, len(boxes))
 
         # rank[i] = reading position of box i (used as the drawn label).
         rank = [0] * len(boxes)

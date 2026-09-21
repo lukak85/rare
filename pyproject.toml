@@ -8,12 +8,12 @@ version = "0.1.0"
 description = "Razčlenjevalnik Revij."
 readme = "README.md"
 # requires-python = ">=3.10"
-# Apache-2.0 overall, except the vendored layoutreader helpers in
-# src/rare/models/order/layoutreader_helpers/, which are CC BY-NC-SA 4.0.
-# See NOTICE for the per-component breakdown.
-license = "Apache-2.0 AND CC-BY-NC-SA-4.0"
-# Ship the third-party license texts and NOTICE alongside the Apache-2.0
-# LICENSE; CC BY-NC-SA 4.0 requires its terms to accompany the code it covers.
+# GPL-3.0-or-later overall. Some components are vendored from Apache-2.0
+# upstreams; Apache-2.0 is one-way compatible with GPLv3, so they keep their
+# original notices and the combined work is GPL. See NOTICE for the breakdown.
+license = "GPL-3.0-or-later"
+# Ship the third-party license texts and NOTICE alongside the GPL LICENSE;
+# Apache-2.0 requires its terms to accompany the code it covers.
 license-files = ["LICENSE", "NOTICE", "licenses/*"]
 dependencies = [
     "pycocotools",

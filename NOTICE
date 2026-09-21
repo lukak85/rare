@@ -1,6 +1,14 @@
 RaRe
 Copyright (c) The RaRe contributors.
 
+RaRe as a whole is licensed under the GNU General Public License, version 3
+or (at your option) any later version; see LICENSE.
+
+Some components are vendored from Apache-2.0 upstreams. Apache License 2.0 is
+one-way compatible with GPLv3: that code may be combined into this GPL work,
+the combined work is distributed under the GPL, and the original Apache
+copyright notices and license texts are preserved below and in licenses/.
+
 This product includes software developed at:
 
 PaddlePaddle/PaddleX (https://github.com/PaddlePaddle/PaddleX)
@@ -35,26 +43,27 @@ by src/rare/evaluate/omnidocbench_docker.py.
 FreeOCR-AI/layoutreader (https://github.com/FreeOCR-AI/layoutreader)
 Copyright (c) 2024 Hantian Pang.
 Licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0
-International License (CC BY-NC-SA 4.0); see licenses/LICENSE-LAYOUTREADER.
+International License (CC BY-NC-SA 4.0).
 
-*** This component is NOT Apache-2.0 and is the sole exception to the license
-*** of this repository as a whole. It may be used for NonCommercial purposes
-*** only, and adaptations of it must be shared under the same license.
-
-The file
-    src/rare/models/order/layoutreader_helpers/helpers.py
-is vendored verbatim from that project's v3/helpers.py (the LayoutLMv3
-input-encoding and logit-to-order decoding routines: DataCollator,
-boxes2inputs, prepare_inputs, parse_logits, check_duplicate). It carries a
-CC BY-NC-SA attribution header and is unmodified.
+*** NOT redistributed by RaRe. *** The NonCommercial term is an additional
+*** restriction of the kind GPLv3 section 7 forbids, so this code cannot be
+*** shipped as part of a GPL work.
 
 The "layoutreader" reading-order backend at
     src/rare/models/order/layoutreader.py
-is original RaRe code (Apache-2.0), but it calls the helpers above and loads
-the `hantian/layoutreader` LayoutLMv3 checkpoint
-(https://huggingface.co/hantian/layoutreader), which is likewise released
-under CC BY-NC-SA 4.0. Using this backend therefore carries the NonCommercial
-restriction, whether or not the helpers file is redistributed.
+is original RaRe code (GPL-3.0-or-later), but it is a client of two
+CC BY-NC-SA 4.0 artefacts that it obtains at runtime and that RaRe does not
+distribute:
+  * that project's v3/helpers.py (the LayoutLMv3 input-encoding and
+    logit-to-order decoding routines: DataCollator, boxes2inputs,
+    prepare_inputs, parse_logits, check_duplicate), downloaded on first use
+    by src/rare/models/order/layoutreader_helpers/__init__.py and cached
+    under ~/.cache/rare/, and
+  * the `hantian/layoutreader` LayoutLMv3 checkpoint
+    (https://huggingface.co/hantian/layoutreader).
+Your use of those two artefacts is governed by CC BY-NC-SA 4.0, not by RaRe's
+license. Running this backend therefore carries the NonCommercial restriction.
+Every other reading-order backend, including "xy-cut", is unrestricted.
 
 That project is itself a LayoutLMv3-based reimplementation of LayoutReader,
 originally published by Microsoft Research
