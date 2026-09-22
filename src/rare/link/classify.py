@@ -257,8 +257,9 @@ def predict_genre(
             label = _match_label(reply, classes)
             if label:
                 return GenrePrediction(label, "classifier", reply)
-        except Exception as exc:  # noqa: BLE001 — one article must not fail the parse
-            logger.warning("classification failed for %s: %s", article_id, exc)
+        except Exception:
+            logger.exception(f"classification failed for {article_id}")
+            raise
 
     # TODO: do not use fallback, this is a separate heuristic
     # if config.classify_section_fallback:

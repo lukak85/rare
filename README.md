@@ -207,15 +207,7 @@ rare evaluate --track vlm --dataset glasbena_mladina \
 The pipeline track can also run [OmniDocBench](https://github.com/opendatalab/OmniDocBench)'s layout evaluator, including **mAP**. Pass `--run-omnidocbench`.
 Use `--omnidocbench-image` to override the image.
 
-Before running, clone the [OmniDocBench](https://github.com/opendatalab/OmniDocBench) repository:
-```bash
-git clone https://github.com/opendatalab/OmniDocBench.git
-```
-Switch to `v1_5` branch:
-```bash
-git switch v1_5
-```
-Copy the Dockerfile from [OmnoDocBench-Dockerfile](./OmniDocBench-Dockerfile) to the root of the cloned repository and build the Docker image:
+Inside [OmnoDocBench-Dockerfile](./OmniDocBench-Dockerfile), build the Docker image:
 ```bash
 docker build -t omnidocbench-v15 .
 ```
@@ -799,22 +791,20 @@ into rare, so they can be output in an arbitrary format (such as JSON, HTML etc.
 Thanks for the work of the authors of these projects:
 - [PaddleX](https://github.com/PaddlePaddle/PaddleX) — the improved XY-Cut reading-order backend is vendored from PaddleX (Apache-2.0); see `NOTICE` and `licenses/LICENSE-PADDLEX`.
 - [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — the end-to-end Edit-distance evaluator (run via `--run-omnidocbench`) and the specialized VLM `img2md` parsing backends are adapted from OmniDocBench (Apache-2.0); see `NOTICE` and `licenses/LICENSE-OMNIDOCBENCH`.
-- [layoutreader](https://github.com/FreeOCR-AI/layoutreader) — the `layoutreader` reading-order backend uses the LayoutLMv3 inference helpers and the `hantian/layoutreader` checkpoint from Hantian Pang's faster LayoutReader (**CC BY-NC-SA 4.0**); see `NOTICE` and `licenses/LICENSE-LAYOUTREADER`, and the licensing note below.
+- [layoutreader](https://github.com/FreeOCR-AI/layoutreader) — the `layoutreader` reading-order backend uses the LayoutLMv3 inference helpers and the `hantian/layoutreader` checkpoint from Hantian Pang's faster LayoutReader (**CC BY-NC-SA 4.0**); neither is redistributed by RaRe, see `NOTICE` and the licensing note below.
 - [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO)
 
 <details>
 <summary><b>LayoutReader specifics</b></summary>
 
-RaRe uses Apache License 2.0 (see `LICENSE`), **with one
-exception**: `src/rare/models/order/layoutreader_helpers/helpers.py` is
-vendored verbatim from [FreeOCR-AI/layoutreader](https://github.com/FreeOCR-AI/layoutreader)
-and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/),
-as is the `hantian/layoutreader` checkpoint that the backend downloads at
-runtime. Consequently the `layoutreader` reading-order backend may be used for
-**non-commercial purposes only**, and adaptations of that file must be shared
-under the same license. Every other backend, including the `xy-cut` reading-order
-backends, is unaffected and remains Apache-2.0. See `NOTICE` for the full
-per-component breakdown.
+RaRe is licensed GPL-3.0-or-later (see `LICENSE`). The LayoutLMv3 inference
+helpers from [FreeOCR-AI/layoutreader](https://github.com/FreeOCR-AI/layoutreader)
+are [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/), whose
+NonCommercial term is an additional restriction that GPLv3 §7 forbids — so RaRe
+**does not ship them**. The first time you run `--order layoutreader`, the
+single upstream `v3/helpers.py` is downloaded and cached under `~/.cache/rare/`
+(override with `RARE_CACHE_DIR`); the `hantian/layoutreader` checkpoint the
+backend loads is likewise CC BY-NC-SA 4.0 and fetched at runtime.
 
 </details>
 
